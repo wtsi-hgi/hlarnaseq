@@ -2,7 +2,7 @@
 # nf-core/hlarnaseq: shared python3 + R data-tools environment.
 #
 # Unlike every other environment.yml in this repository, this one is NOT
-# module-local: it is shared by the eleven modules that run this pipeline's own
+# module-local: it is shared by the twelve modules that run this pipeline's own
 # bin/ analysis scripts or its small shell data-shuffling steps, each of which
 # points its `conda` directive at this file and its `container` directive at
 # the one image built from it:
@@ -12,6 +12,7 @@
 #   ARCASHLA_COMBINE               bin/combine_arcashla_genotypes.R    jsonlite, dplyr, tibble, stringr, purrr
 #   HLAPM_SUMMARIZE_READCOUNTS     bin/summarize_hla_readcounts.R      dplyr, tidyr
 #   HLA_READCOUNT_RECONCILE_DIFF   bin/reconcile_hla_readcounts.py     python3, pandas
+#   GTF_HLA_GENE_ID_CHECK          bin/check_gtf_hla_gene_ids.py       python3 (stdlib only)
 #   COUNTS_COMMONREF_HLA_REFORMAT  bin/reformat_rnaseq_featurecounts.py  samtools, python3 (stdlib only)
 #   HLALA_COMBINE                  (inline shell)                      bash, coreutils, awk
 #   HIBAG_COMBINE                  (inline shell)                      bash, coreutils, awk
@@ -19,9 +20,9 @@
 #   HLAPM_LIST_STAR_TARGETS        (inline shell)                      bash, coreutils, findutils
 #   HLAPM_RESOLVE_SAMPLE_ALLELES   (inline shell)                      bash, coreutils
 #
-# One file rather than eleven near-identical module-local ones: these are small
+# One file rather than twelve near-identical module-local ones: these are small
 # data transformations over the same two interpreters plus a POSIX shell, and
-# eleven copies of an overlapping package list would drift. See
+# twelve copies of an overlapping package list would drift. See
 # containers/datatools/README.md.
 #
 # The shell-only consumers add nothing to this file: bash, coreutils, awk,

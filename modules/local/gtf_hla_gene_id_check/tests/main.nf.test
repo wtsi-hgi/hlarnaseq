@@ -1,0 +1,151 @@
+nextflow_process {
+
+    name "Test Process GTF_HLA_GENE_ID_CHECK"
+    script "../main.nf"
+    process "GTF_HLA_GENE_ID_CHECK"
+    tag "modules"
+    tag "modules_local"
+    tag "gtf_hla_gene_id_check"
+
+    test("accepts a GTF whose HLA-region gene names each map to exactly one gene_id") {
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                hla_region = 'chr6:28500000-33400000'
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    file("${projectDir}/tests/fixtures/gtf_hla_gene_id_check/mhc_unique.gtf", checkIfExists: true)
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+
+            def rows = file(process.out.report[0]).text
+                .readLines()
+                .drop(1)
+                .collect { it.split('\t', -1) }
+
+            // Exactly the in-scope names: the three in-region genes (two of
+            // which are also HLA--prefixed). The off-region chr1 GENE_X is
+            // out of scope and must not appear.
+            assert rows.size() == 3
+            assert rows.every { it[5] == 'unique' }
+            assert rows.every { it[2] == '1' }
+            assert rows.count { it[0] == 'HLA-A' && it[1] == 'ENSG_HLA_A' && it[3] == 'yes' && it[4] == 'yes' } == 1
+            assert rows.count { it[0] == 'MICA' && it[1] == 'ENSG_MICA' && it[3] == 'yes' && it[4] == 'no' } == 1
+            assert rows.every { it[0] != 'GENE_X' }
+
+            // The mhc_unique.gtf fixture carries a `transcript` row for
+            // HLA-A with a deliberately different gene_id: only
+            // feature_type == "gene" rows count, so it must not have been
+            // picked up as a second HLA-A id above.
+            assert rows.count { it[0] == 'HLA-A' && it[1].contains('NOT_A_GENE_ROW') } == 0
+
+            assert file(process.out.versions[0]).exists()
+        }
+    }
+
+    test("rejects an in-region duplicated gene_name and an in-region shared gene_id") {
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                hla_region = 'chr6:28500000-33400000'
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    file("${projectDir}/tests/fixtures/gtf_hla_gene_id_check/mhc_duplicate.gtf", checkIfExists: true)
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.failed
+            // 1, not 127: the environment was fine, the GTF was not.
+            assert process.exitStatus == 1
+
+            // The offending pairs are printed to stderr in full - a failed
+            // task publishes nothing, so this message is the user's only
+            // copy of the list.
+            def stderr = process.errorReport ?: ''
+            assert stderr.contains('non-unique gene_name <-> gene_id mapping')
+            // Forward direction: one gene_name, two gene_ids.
+            assert stderr.contains('HLA-A')
+            assert stderr.contains('ENSG_HLA_A')
+            assert stderr.contains('ENSG_HLA_A_DUP')
+            assert stderr.contains('duplicated_gene_name')
+            // Reverse direction: one gene_id, two in-scope gene_names.
+            assert stderr.contains('MICA')
+            assert stderr.contains('MICB')
+            assert stderr.contains('ENSG_MIC_SHARED')
+            assert stderr.contains('duplicated_gene_id')
+        }
+    }
+
+    test("rejects an off-region duplicate gene_id for an in-region gene name") {
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                hla_region = 'chr6:28500000-33400000'
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    file("${projectDir}/tests/fixtures/gtf_hla_gene_id_check/mhc_offregion_duplicate.gtf", checkIfExists: true)
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.failed
+            assert process.exitStatus == 1
+
+            // The second HLA-A gene row is on chr1, outside --hla_region:
+            // distinct gene_ids are counted genome-wide (as
+            // bin/reconcile_hla_readcounts.py's load_gene_name_to_ids()
+            // does), so this still fails.
+            def stderr = process.errorReport ?: ''
+            assert stderr.contains('HLA-A')
+            assert stderr.contains('ENSG_HLA_A_OFFREGION')
+            assert stderr.contains('duplicated_gene_name')
+        }
+    }
+
+    test("accepts a GTF with no HLA-region annotation at all, with a non-fatal warning") {
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                hla_region = 'chr6:28500000-33400000'
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    file("${projectDir}/tests/fixtures/placeholder.gtf", checkIfExists: true)
+                )
+                """
+            }
+        }
+
+        then {
+            // -profile test's placeholder.gtf has two chr1 rows and no
+            // HLA--prefixed gene, so zero genes are in scope. That is a
+            // warning, not a failure - the report is header-only.
+            assert process.success
+
+            def lines = file(process.out.report[0]).text.readLines()
+            assert lines.size() == 1
+            assert lines[0] == 'gene_name\tgene_ids\tn_gene_ids\tin_region\thla_prefixed\tstatus'
+        }
+    }
+}

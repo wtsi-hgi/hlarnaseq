@@ -23,6 +23,9 @@
                     "samtools": "unknown",
                     "python3": "unknown"
                 },
+                "GTF_HLA_GENE_ID_CHECK": {
+                    "python3": "3.14.6"
+                },
                 "HLAPM_BUILD_REF": {
                     "R": "unknown",
                     "HLApm": "unknown"
@@ -98,6 +101,8 @@
                 "counts_commonref_hla/RNA_SAMPLE_1",
                 "counts_commonref_hla/RNA_SAMPLE_1/RNA_SAMPLE_1.featureCounts.tsv.summary",
                 "counts_commonref_hla/RNA_SAMPLE_1/RNA_SAMPLE_1.rnaseq_featurecounts.tsv",
+                "gtf_hla_gene_id_check",
+                "gtf_hla_gene_id_check/hla_region_gene_id_map.tsv",
                 "hla_consensus",
                 "hla_consensus/hla_consensus.rna_wgs_hla_consensus.tsv",
                 "hla_consensus/hla_consensus.rna_wgs_rna-hla_with_consensus.tsv",
@@ -172,6 +177,7 @@
                 "RNA_SAMPLE_1.featureCounts.tsv.summary:md5,d41d8cd98f00b204e9800998ecf8427e",
                 "RNA_SAMPLE_1.featureCounts.tsv.summary:md5,d41d8cd98f00b204e9800998ecf8427e",
                 "RNA_SAMPLE_1.rnaseq_featurecounts.tsv:md5,275cf3833b1f6e49a6bef8d98fa3f7df",
+                "hla_region_gene_id_map.tsv:md5,23b6bb8f8bb26144edca8e676ae99c92",
                 "hla_consensus.rna_wgs_hla_consensus.tsv:md5,f67bf27de8a0ee41ba0fa1fdbc96d484",
                 "hla_consensus.rna_wgs_rna-hla_with_consensus.tsv:md5,c089d676b1273b0f9d90aa830cd97d36",
                 "RNA_SAMPLE_1.gene_id_resolution_warnings.tsv:md5,8867f9ac54028496d3d7b1660abe59ce",

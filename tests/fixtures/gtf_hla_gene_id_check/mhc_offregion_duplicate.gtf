@@ -1,0 +1,13 @@
+#!genome-build fixture
+#!genome-version fixture
+# The in-region annotation is itself unambiguous, but HLA-A is annotated a
+# second time OUTSIDE the region (on chr1) with a different gene_id. Distinct
+# gene_ids are counted genome-wide - exactly as
+# bin/reconcile_hla_readcounts.py's load_gene_name_to_ids() does - so this
+# must fail too.
+chr6	fixture	gene	29942532	29945870	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	fixture	exon	29942532	29945870	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	fixture	gene	31353875	31357188	.	-	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";
+chr6	fixture	gene	31399784	31415315	.	+	.	gene_id "ENSG_MICA"; gene_name "MICA";
+chr1	fixture	gene	1000	2000	.	+	.	gene_id "ENSG_HLA_A_OFFREGION"; gene_name "HLA-A";
+chr1	fixture	gene	5000	6000	.	+	.	gene_id "ENSG_GENE_X"; gene_name "GENE_X";

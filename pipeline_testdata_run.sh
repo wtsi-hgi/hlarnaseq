@@ -64,6 +64,7 @@ PROFILE="${PROFILE:-}"
 HLA_REGION="${HLA_REGION:-chr6:28500000-33400000}"
 HLAPM_DIR="${RUN_DIR}/HLApm/"
 GTF="${ROOT_DIR}/testdata-make/hlarnases-testdata/reference/gencode.v50.primary_assembly.annotation.gtf.gz"
+GTF_PATCHED="${ROOT_DIR}/testdata-make/hlarnases-testdata/reference/gencode.v50.primary_assembly.annotation.hla-unique.gtf.gz"
 
 mkdir -p "${RUN_DIR}"
 
@@ -97,12 +98,17 @@ fi
 #    git clone https://github.com/davenportlab/HLApm.git "$HLAPM_DIR"
 # fi
 
+if [ ! -s "$GTF_PATCHED" ]; then
+   scripts/patch_gtf_gene_ids.py --gtf "$GTF" --patch gencodev50.mapping_patch.tsv | gzip > "$GTF_PATCHED"
+fi
+
+
 nextflow -log "${NEXTFLOW_LOG}" \
     run . \
     -work-dir "${NEXTFLOW_WORKDIR}" \
     -profile singularity \
     -resume \
-    --gtf "$GTF" \
+    --gtf "$GTF_PATCHED" \
     --arcashla_reference_dir "$ARCASHLA_REF" \
     --rna_samples "${RNA_SAMPLESHEET}" \
     --hla_region "${HLA_REGION}" \

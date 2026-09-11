@@ -1,0 +1,18 @@
+# Fixture patch for scripts/patch_gtf_gene_ids.py, written against
+# tests/fixtures/gtf_hla_gene_id_check/mhc_duplicate.gtf.
+#
+# That fixture has one offender per failure direction of
+# bin/check_gtf_hla_gene_ids.py, and this patch fixes each with a different
+# action, so both paths of the script are exercised:
+#
+#   duplicated_gene_name  HLA-A is on two gene_ids -> rename the redundant one
+#   duplicated_gene_id    ENSG_MIC_SHARED carries both MICA and MICB, an
+#                         annotation artifact with no salvageable single name
+#                         -> remove it, and with it both of its rows
+#
+# Patching mhc_duplicate.gtf with this file makes the check exit 0. ENSG_HLA_A
+# (2 rows), ENSG_HLA_B and ENSG_GENE_X are not listed and must come through
+# byte for byte.
+gene_id	new_gene_name
+ENSG_HLA_A_DUP	HLA-A_dup
+ENSG_MIC_SHARED

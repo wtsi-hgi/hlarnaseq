@@ -1,0 +1,67 @@
+# gencodev50.mapping_patch.tsv
+#
+# gene_name <-> gene_id disambiguation patch for
+# gencode.v50.primary_assembly.annotation.gtf.gz, covering every gene name that
+# GTF_HLA_GENE_ID_CHECK rejects in the default HLA region
+# (--hla_region chr6:28500000-33400000).
+#
+# Apply with scripts/patch_gtf_gene_ids.py; see docs/usage.md
+# "Patching a rejected GTF" for the invocation. Applying this patch makes the
+# mapping one-to-one in the HLA region and the check exits 0.
+#
+# Provenance: every gene_id and attribute below was read directly from the
+# `gene` rows of gencode.v50.primary_assembly.annotation.gtf.gz (sha-verified
+# copy at /mnt/vol/hlarnaseq-data/hlarnases-testdata/reference/), not from
+# memory. Compiled 2026-09-10.
+#
+# Columns (tab-separated):
+#   1  gene_id        the gene to act on, version suffix included
+#   2  new_gene_name  the gene_name it should carry after patching; leave the
+#                     column off to remove that gene and all of its nested
+#                     entries instead
+#
+# This patch renames only - nothing is removed, so the patched GTF has exactly
+# as many lines as the input. Every gene_id NOT listed here is left untouched.
+#
+# Primary-ID choice
+# -----------------
+# HLA-DRB6, HLA-H, HLA-L and HLA-V each have exactly two GENCODE v50 records: a
+# large lncRNA locus and a small transcribed_unprocessed_pseudogene nested
+# inside it. The lncRNA keeps the plain gene name and is therefore absent from
+# this file; only the pseudogene is renamed. The primary ids left untouched are:
+#
+#   HLA-DRB6   ENSG00000290878.2   (the convention the other three follow)
+#   HLA-H      ENSG00000310469.1
+#   HLA-L      ENSG00000291097.2
+#   HLA-V      ENSG00000290710.2
+#
+# POLR1HASP is a deliberate exception, decided by the scientific team: its
+# transcribed_unitary_pseudogene record (ENSG00000204623.12) is GENCODE level 1
+# (validated) while the lncRNA is level 2, so the pseudogene is primary here -
+# and so it is the lncRNA that gets renamed - even though that breaks
+# consistency with the four rows above.
+#
+# Y_RNA is not an ambiguous gene at all - it is a family symbol (Rfam-derived Y
+# RNA) shared by 758 equivalent misc_RNA level-3 copies genome-wide, 7 of them
+# in the MHC. There is no primary ID to pick, so all 7 in-region copies are
+# renamed per locus instead. This is what takes the name out of scope: the
+# check counts gene_ids genome-wide, so as long as any in-region gene is still
+# called Y_RNA the remaining 751 off-region copies keep it ambiguous. The new
+# names must be distinct from each other - renaming all 7 to one shared name
+# does not fix it. Ordered by MHC coordinate. The 751 off-region copies are
+# deliberately not listed: they are genuinely different genes that happen to
+# share a symbol, and nothing here touches them.
+#
+gene_id	new_gene_name
+ENSG00000229391.8
+ENSG00000206341.7
+ENSG00000243753.8
+ENSG00000181126.14
+ENSG00000293508.2	POLR1HASP_lncRNA
+ENSG00000199290.1	Y_RNA_MHC_1
+ENSG00000201988.2	Y_RNA_MHC_2
+ENSG00000252761.1	Y_RNA_MHC_3
+ENSG00000199332.1	Y_RNA_MHC_4
+ENSG00000201680.1	Y_RNA_MHC_5
+ENSG00000201207.1	Y_RNA_MHC_6
+ENSG00000201555.1	Y_RNA_MHC_7

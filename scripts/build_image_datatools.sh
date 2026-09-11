@@ -12,7 +12,8 @@ scripts - or one of its small inline-shell data-shuffling steps - resolves with
 no registry push required:
 
   HLA_CONSENSUS, HLAPM_PREPARE_INPUT, ARCASHLA_COMBINE, HLAPM_SUMMARIZE_READCOUNTS,
-  HLA_READCOUNT_RECONCILE_DIFF, COUNTS_COMMONREF_HLA_REFORMAT, HLALA_COMBINE,
+  HLA_READCOUNT_RECONCILE_DIFF, GTF_HLA_GENE_ID_CHECK,
+  COUNTS_COMMONREF_HLA_REFORMAT, HLALA_COMBINE,
   HIBAG_COMBINE, HLAPM_COMBINE_GTF, HLAPM_LIST_STAR_TARGETS,
   HLAPM_RESOLVE_SAMPLE_ALLELES
 
@@ -31,7 +32,7 @@ no registry push required:
 Unlike the other build_image_*.sh scripts here, this image is shared rather
 than module-local; see containers/datatools/README.md. If you change
 containers/datatools/environment.yml, bump IMAGE_TAG below AND the `container`
-directive in all eleven modules above so a tag always means one set of contents.
+directive in all twelve modules above so a tag always means one set of contents.
 
 Environment:
   IMAGE_TAG   Docker image reference to build/tag. Default: quay.io/hlarnaseq/datatools:1.1

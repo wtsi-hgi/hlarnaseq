@@ -419,7 +419,7 @@ Under `-profile conda` the same `environment.yml` is used, which means Conda nee
 
 #### Shared data-tools container
 
-Eleven modules do not wrap a bioinformatics tool at all - they run this repository's own small analysis scripts from `bin/`, or a few lines of inline shell:
+Twelve modules do not wrap a bioinformatics tool at all - they run this repository's own small analysis scripts from `bin/`, or a few lines of inline shell:
 
 | Module                          | Script                                                                   |
 | ------------------------------- | ------------------------------------------------------------------------ |
@@ -428,6 +428,7 @@ Eleven modules do not wrap a bioinformatics tool at all - they run this reposito
 | `ARCASHLA_COMBINE`              | `combine_arcashla_genotypes.R` (jsonlite, dplyr, tibble, stringr, purrr) |
 | `HLAPM_SUMMARIZE_READCOUNTS`    | `summarize_hla_readcounts.R` (dplyr, tidyr)                              |
 | `HLA_READCOUNT_RECONCILE_DIFF`  | `reconcile_hla_readcounts.py` (python3, pandas)                          |
+| `GTF_HLA_GENE_ID_CHECK`         | `check_gtf_hla_gene_ids.py` (python3)                                    |
 | `COUNTS_COMMONREF_HLA_REFORMAT` | `reformat_rnaseq_featurecounts.py` (python3) + `samtools`                |
 | `HLALA_COMBINE`                 | inline shell (bash, coreutils, awk)                                      |
 | `HIBAG_COMBINE`                 | inline shell (bash, coreutils, awk)                                      |
@@ -435,7 +436,7 @@ Eleven modules do not wrap a bioinformatics tool at all - they run this reposito
 | `HLAPM_LIST_STAR_TARGETS`       | inline shell (bash, coreutils, findutils)                                |
 | `HLAPM_RESOLVE_SAMPLE_ALLELES`  | inline shell (bash, coreutils)                                           |
 
-All eleven share one environment, [`containers/datatools/environment.yml`](../containers/datatools/environment.yml), and one image built from it. Unlike every other environment file here it is not module-local, because eleven near-identical copies of an overlapping package list would drift apart; see [`containers/datatools/README.md`](../containers/datatools/README.md).
+All twelve share one environment, [`containers/datatools/environment.yml`](../containers/datatools/environment.yml), and one image built from it. Unlike every other environment file here it is not module-local, because twelve near-identical copies of an overlapping package list would drift apart; see [`containers/datatools/README.md`](../containers/datatools/README.md).
 
 `COUNTS_COMMONREF_HLA_REFORMAT` is why that environment also carries `samtools` (pinned to **1.24**, the same version `ARCASHLA_EXTRACT` and the vendored `SAMTOOLS_SORT` use, so the pipeline never runs two samtools versions): it needs `samtools` and `python3` together, and no prebuilt public image pairs them. The five inline-shell modules add nothing to the environment - `bash`, coreutils, `awk`, `findutils` and `grep` come from the image's base OS under a container profile and from the host under `-profile conda` - but they point at it so they declare a reproducible environment rather than none at all.
 
@@ -445,12 +446,118 @@ Build it once before running with a container profile:
 scripts/build_image_datatools.sh
 ```
 
-This builds `quay.io/hlarnaseq/datatools:1.1` and the local `containers/datatools/datatools.sif`, following the same local-image pattern as the other images described above. Under `-profile conda`, Nextflow creates the one environment and all eleven modules share it.
+This builds `quay.io/hlarnaseq/datatools:1.1` and the local `containers/datatools/datatools.sif`, following the same local-image pattern as the other images described above. Under `-profile conda`, Nextflow creates the one environment and all twelve modules share it.
 
 > [!IMPORTANT]
 > The image tag moved from `:1.0` to `:1.1` when `samtools` was added. If you built the image before that, **rebuild it** - a run under `-profile docker` will otherwise fail to find `quay.io/hlarnaseq/datatools:1.1` in the local image store, and `-profile singularity`/`apptainer` will silently use a stale `.sif` with no `samtools`.
 
-Package versions are pinned to those the pipeline's existing published results were produced with, so containerizing these steps changes no output. Running any of these eleven modules with no `-profile conda`/`docker`/`singularity`/`apptainer` now fails fast with a message naming those profiles, instead of silently using whichever `python3`/`Rscript`/`samtools` happens to be on the host `PATH` - the same trade already made for `ARCASHLA_EXTRACT`, `HIBAG_PREDICT` and `HLAPM_BUILD_REF`.
+Package versions are pinned to those the pipeline's existing published results were produced with, so containerizing these steps changes no output. Running any of these twelve modules with no `-profile conda`/`docker`/`singularity`/`apptainer` now fails fast with a message naming those profiles, instead of silently using whichever `python3`/`Rscript`/`samtools` happens to be on the host `PATH` - the same trade already made for `ARCASHLA_EXTRACT`, `HIBAG_PREDICT` and `HLAPM_BUILD_REF`.
+
+## GTF HLA gene-id uniqueness check
+
+> [!IMPORTANT]
+> This check rejects **stock GENCODE**. A run with an unmodified
+> `gencode.v50.primary_assembly.annotation.gtf.gz` fails, by design, within seconds of starting. You must supply a corrected GTF - see [Fixing a rejected GTF](#fixing-a-rejected-gtf) below. There is no opt-out parameter and no lenient mode, and because RNA-seq HLA quantification is the pipeline's only mode (`--rna_samples` and `--gtf` are both required), there is no WGS-only or typing-only run to fall back on in the meantime.
+
+Before any counting or reconciliation result is produced, a new `GTF_HLA_GENE_ID_CHECK` process (`bin/check_gtf_hla_gene_ids.py`) makes one streaming pass over `--gtf` and refuses to continue unless its HLA-region annotation carries a strict one-to-one `gene_name` <-> `gene_id` mapping. It runs on every launchable run, is submitted in the first scheduling wave alongside MHC extraction, takes seconds even on a whole-genome GTF, and publishes a small provenance table (`gtf_hla_gene_id_check/hla_region_gene_id_map.tsv`, see [output docs](output.md#gtf-hla-gene-id-uniqueness-check)).
+
+### What is checked, and over which genes
+
+Only `feature_type == "gene"` rows are considered, so a gene with many `transcript`/`exon` rows is never mistaken for a duplicate. The genes **in scope** are the union of two sets - matching the two different ways a gene name reaches the [HLA read-count reconciliation diff table](#hla-read-count-reconciliation-diff-table) below:
+
+1. every gene overlapping `--hla_region` (the same samtools region string `ARCASHLA_EXTRACT` slices each BAM with, so this is exactly the set of non-HLA gene names the reconciliation can see); **union**
+2. every gene whose name starts with `HLA-`, wherever it sits in the file (the personalized-reference gene names, which come from HLApm rather than from the region slice, so definition 1 alone would miss them).
+
+For each in-scope gene name, **distinct `gene_id`s are counted across the whole GTF**, not just inside the region - the same thing `bin/reconcile_hla_readcounts.py` does when it resolves a name - so an off-region second annotation of an in-region gene name is an offender too. Both directions fail:
+
+- a `gene_name` carrying more than one distinct `gene_id` (`status=duplicated_gene_name`);
+- a `gene_id` carrying more than one distinct in-scope `gene_name` (`status=duplicated_gene_id`).
+
+Because scope definition 1 is keyed off `--hla_region`, narrowing `--hla_region` narrows what is checked. That is deliberate - it keeps the check aligned with the region the pipeline actually analyses - but it does mean the two parameters have to be chosen together.
+
+A GTF with **no** gene overlapping `--hla_region` is a non-fatal warning, not a failure: `-profile test`'s tiny `placeholder.gtf` legitimately has none. On a real whole-genome GTF that warning almost always means a contig-notation mismatch (`chr6` vs `6`) between `--hla_region` and the GTF, and is worth acting on.
+
+### The failure message
+
+The process exits `1` and, because `conf/modules.config` gives it `errorStrategy = 'terminate'`, the run aborts immediately rather than waiting for already-running tasks. **Every** offending pair is printed to stderr - uncapped - because a failed Nextflow task publishes nothing, so that message is the only copy of the list you get without going into the task work directory:
+
+```
+ERROR: --gtf has a non-unique gene_name <-> gene_id mapping in the HLA region
+       (6 offending gene names, HLA region = chr6:28500000-33400000).
+  HLA-DRB6   ENSG00000290878.2, ENSG00000229391.8    duplicated_gene_name
+  HLA-H      ENSG00000310469.1, ENSG00000206341.7    duplicated_gene_name
+  HLA-L      ENSG00000291097.2, ENSG00000243753.8    duplicated_gene_name
+  HLA-V      ENSG00000290710.2, ENSG00000181126.14   duplicated_gene_name
+  POLR1HASP  ENSG00000293508.2, ENSG00000204623.12   duplicated_gene_name
+  Y_RNA      ENSG00000200344.1, ENSG00000252254.1, ... (758 ids)
+Fix --gtf (drop or rename the duplicate gene rows) and re-run. ...
+Full table: hla_region_gene_id_map.tsv ...
+```
+
+That is the **actual** verdict on `gencode.v50.primary_assembly.annotation.gtf.gz` with the default `--hla_region`: 476 gene names in scope (476 in-region, 39 `HLA-`-prefixed), 6 of them offenders. Note the last two: this check is not HLA-specific within the region, so the non-HLA `POLR1HASP` and `Y_RNA` fail it too. `Y_RNA` is the extreme case - that one name is reused 758 times genome-wide (7 of them inside the MHC), and because the message is uncapped, all 758 ids really are printed on that one line. Truncating it was rejected deliberately: a failed task publishes nothing, so this is the only complete copy of the list, and the `--report` table in the task work directory is the readable form.
+
+An exit status of `127` instead means the process got no environment at all (no `-profile conda`/`docker`/`singularity`/`apptainer`), not that your GTF is bad - see [Dependencies and profiles](#dependencies-and-profiles). An exit status of `2` means `--hla_region` could not be parsed as `contig[:start[-end]]`.
+
+### Fixing a rejected GTF
+
+Most offending rows in a real GENCODE GTF are annotation-duplication artifacts: two near-identical, overlapping `gene` rows for one locus, each with its own `gene_id` (the four HLA pseudogenes and `POLR1HASP` above are all of this kind). Either id is a defensible choice of "the" gene id, but the pipeline cannot pick one for you without silently attributing read counts to an arbitrary id. So the fix is to make the file unambiguous, then re-run:
+
+- **drop** the redundant `gene` row (and its `transcript`/`exon` children) for each offending `gene_name`, keeping the annotation you consider canonical - usually the one with the longer span or the non-`_2`-suffixed `gene_name` in your source; or
+- **rename** one of the two `gene_name`s so the pair no longer collides (e.g. `HLA-H` and `HLA-H_dup`). Note that a renamed `HLA-`-prefixed gene stays in scope by definition 2 above, and that HLApm gene names must still match, so renaming is the better option only for genes the personalized reference does not carry.
+
+A `gene_name` that is **reused genome-wide** rather than duplicated at one locus (`Y_RNA`, and in other annotation sources names like `SNORD*` or `5_8S_rRNA`) needs the second approach, applied only to the copies inside the region: give each in-region `gene` row its own unique name (`Y_RNA_MHC_1`, `Y_RNA_MHC_2`, ...). Once no in-region row carries the shared name, that name is out of scope entirely - by definition 1, only in-region genes are checked - so its hundreds of out-of-region copies stop mattering, and the renamed in-region genes each map to one id. Do **not** try to collapse the out-of-region copies; they are genuinely different genes that happen to share a symbol.
+
+Both fixes can be applied mechanically from a small, reviewable patch file rather than by hand - see [Patching a rejected GTF](#patching-a-rejected-gtf) below, which includes a ready-made patch for GENCODE v50.
+
+Re-run the check on its own, without launching the pipeline, to iterate quickly:
+
+```bash
+singularity exec containers/datatools/datatools.sif \
+  bin/check_gtf_hla_gene_ids.py \
+    --gtf /path/to/annotation.gtf.gz \
+    --hla-region chr6:28500000-33400000 \
+    --report hla_region_gene_id_map.tsv
+```
+
+The report lists every in-scope gene name with its `gene_ids`, `n_gene_ids`, `in_region`, `hla_prefixed` and `status`, so `awk -F'\t' '$6 != "unique"'` over it is the full worklist.
+
+### Patching a rejected GTF
+
+`scripts/patch_gtf_gene_ids.py` performs both fixes above from a small patch file, so a corrected GTF is reproducible from a reviewable, version-controlled record of what was changed and why, rather than from an ad hoc `awk` invocation nobody kept. It is an operator tool run out of band, like the other `scripts/` helpers: no process runs it, and it changes no pipeline behaviour. It reads the GTF plain or gzipped and writes the patched GTF to **stdout**, with an action summary on stderr.
+
+The patch is a two-column TSV whose second column is optional per row. `#` comments, blank lines, and a `gene_id`/`new_gene_name` header row are ignored.
+
+| Column | Meaning                                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1      | `gene_id`, matched exactly against the row's `gene_id` attribute - **version suffix included** (`ENSG00000206341.7`, not `ENSG00000206341`) |
+| 2      | `new_gene_name`. Present: **rename** that gene. Absent, empty, or whitespace-only: **remove** it.                                           |
+
+Each action reaches the whole gene, not just its `gene` row. Every `transcript`, `exon`, `CDS`, `UTR` and codon row carries the same `gene_id`, so a removed gene disappears completely and a renamed gene is renamed on all of its rows - which is what makes the fix effective downstream, since featureCounts reads `exon` rows and would otherwise keep counting under the old name. A rename rewrites the `gene_name "..."` token and nothing else, leaving every other attribute, their order, and the row's whitespace untouched.
+
+**Genes you do not list are never touched.** Nothing is inferred from `gene_name`, so an unlisted gene that merely shares a symbol with a listed one comes through byte for byte - that is what makes the `Y_RNA` case safe to patch: naming the 7 in-region `gene_id`s cannot disturb the 751 copies elsewhere in the genome. A `gene_id` listed in the patch but **absent** from the GTF is a hard error (exit `3`) rather than a silent no-op, and the whole patch is resolved against the GTF before the first output byte, so a stale patch or the wrong `--gtf` leaves stdout empty instead of a truncated file that looks usable. Exit `2` means an input could not be used at all - the patch file is malformed (bad row, duplicate `gene_id`) or a file could not be read. Because stdout is a whole GTF, the script behaves like any other Unix filter when its reader goes away: piping into `head`, or into a `gzip` that dies, ends quietly with `141` rather than a traceback.
+
+`gencodev50.mapping_patch.tsv` in the repository root is a worked example: the complete, rename-only patch that makes stock `gencode.v50.primary_assembly.annotation.gtf.gz` pass this check under the default `--hla_region`, with its provenance and the reasoning behind each primary-id choice in its comment preamble.
+
+```bash
+singularity exec containers/datatools/datatools.sif \
+  scripts/patch_gtf_gene_ids.py \
+    --gtf gencode.v50.primary_assembly.annotation.gtf.gz \
+    --patch gencodev50.mapping_patch.tsv \
+  | gzip > gencode.v50.hla-patched.gtf.gz
+
+# confirm, then use the result as --gtf
+singularity exec containers/datatools/datatools.sif \
+  bin/check_gtf_hla_gene_ids.py \
+    --gtf gencode.v50.hla-patched.gtf.gz \
+    --hla-region chr6:28500000-33400000 \
+    --report hla_region_gene_id_map.tsv
+```
+
+Two things the script deliberately does not do. It does not rewrite attributes derived from the old symbol, notably GENCODE's `transcript_name "HLA-H-201"`, which keeps the old name after a rename; nothing in this pipeline reads them, so this is cosmetic residue rather than a correctness problem. And it will not stop you removing a gene the personalized reference still expects - the caution in [Fixing a rejected GTF](#fixing-a-rejected-gtf) applies unchanged, so prefer renaming for `HLA-`-prefixed genes HLApm carries. The stderr summary prints each patched gene's current `gene_name` alongside its action for exactly this reason.
+
+### Why this is stricter than it used to be
+
+An earlier iteration deliberately made this ambiguity _non_-fatal, resolving it softly inside `bin/reconcile_hla_readcounts.py` (see `CHANGELOG.md`, the "484 ambiguous gene names in GENCODE v50" entry). That is now reversed for HLA-region genes: neither soft resolution produces a usable `gene_id` for the planned count-matrix patching step - the HLA rule picks an arbitrary first id, and the non-HLA rule emits a semicolon-joined id string that is not a `gene_id` at all - so ambiguity is rejected up front instead. The soft handling itself stays in place as defence in depth for names outside this check's scope, and for the `missing_gene_name` case, which remains a soft fail.
 
 ## Whole-genome common-reference gene counts
 
@@ -492,6 +599,7 @@ Every gene name in the output (HLA and non-HLA alike) is resolved to a `gene_id`
 
 - A `gene_name` absent from `--gtf` resolves to the literal string `NA` - a personalized-reference-only or renamed gene symbol legitimately missing from the whole-genome GTF is plausible.
 - A `gene_name` that maps to more than one distinct `gene_id` in `--gtf` (a real, non-hypothetical occurrence: GENCODE v50's primary assembly has 484 such ambiguous names, including 4 HLA genes themselves - `HLA-H`, `HLA-L`, `HLA-V`, `HLA-DRB6` - each a near-identical/overlapping-gene-row annotation-duplication artifact) is resolved deterministically instead of failing the run: an HLA-category row uses the first `gene_id` encountered while scanning `--gtf` (first-appearance order, not resolved alphabetically or by iteration order of a Python `set`); a non-HLA-category row instead keeps **every** candidate `gene_id`, semicolon-joined in that same first-appearance order (e.g. `ENSG00000236397.3;ENSG00000308415.1;ENSG00000310539.1`), so no candidate id is silently dropped.
+  - **This soft resolution is now unreachable for HLA-region genes.** Since the [GTF HLA gene-id uniqueness check](#gtf-hla-gene-id-uniqueness-check) was added, a `--gtf` that is ambiguous over any gene overlapping `--hla_region` or any `HLA-`-prefixed gene name is rejected before this step ever runs - which is the whole set of names this reconciliation can produce in practice, including all 4 GENCODE v50 HLA offenders above. The soft policy therefore stays only as defence in depth (for a name that somehow falls outside that scope) and for `missing_gene_name`, which is still a soft fail. A run that reaches this step is a run whose HLA-region `gene_name` -> `gene_id` mapping has already been proven one-to-one.
 
 This reconciliation - and the ambiguous-`gene_id` resolution above - operates entirely at `gene_name` granularity, never `gene_id`: the per-read `gene_id` featureCounts originally assigned (via its `XT` tag) is already discarded upstream, when [`bin/reformat_rnaseq_featurecounts.py`](#hla-region-per-read-featurecounts-reconciliation-input) converts it to `gene_name` (above) - `counts_commonref_hla`'s own per-read table never carries `gene_id` at all, so this step has no per-read `gene_id` left to work with even for a non-HLA row. This is not just an incidental data-loss inconvenience: featureCounts assigns each mate of a read pair independently, based on that mate's own overlap, so for two overlapping gene annotations that happen to share one `gene_name` (exactly the kind of annotation-duplication artifact described above - `POLR1HASP`'s two `gene_id`s are one real example: a large lncRNA locus with a smaller pseudogene entirely nested inside its span), a read pair's R1 and R2 mates can each be assigned a _different_ specific `gene_id` by featureCounts while still agreeing on `gene_name`. There is therefore no single, unambiguous `gene_id` to attribute a whole read pair to even in principle, which is why a non-HLA row's `original_fc_count`/`diff` (or an HLA row's `personalized_count`, which HLApm never associates with any whole-genome `gene_id` at all) is never split out per individual `gene_id` - the semicolon-joined-list/first-id policy above is the full extent of this step's `gene_id` resolution.
 
@@ -513,7 +621,7 @@ nextflow run nf-core/hlarnaseq \
 
 All five of those input parameters, plus `--outdir`, are required: RNA-seq HLA quantification is the pipeline's purpose, so there is no RNA-less or typing-only mode. A run missing any of them stops immediately with nf-schema's `Missing required parameter(s): ...`. Genotype-side typing (`--wgs_samples` with HLA-LA, or `--array_samples` with HIBAG) stays optional.
 
-Every step provisions its own tools. All seventeen processes under `modules/local/` declare a `conda` directive backed by an `environment.yml` and a matching pinned `container`, as do all vendored `modules/nf-core/` modules — MHC extraction (samtools), read-pair validation and arcasHLA genotyping included. No pipeline step falls back to whatever happens to be on the host `$PATH`; running with none of `-profile conda`/`docker`/`singularity`/`apptainer` fails with an explicit message naming the missing tool. See [Dependencies and profiles](#dependencies-and-profiles).
+Every step provisions its own tools. All eighteen processes under `modules/local/` declare a `conda` directive backed by an `environment.yml` and a matching pinned `container`, as do all vendored `modules/nf-core/` modules — MHC extraction (samtools), read-pair validation and arcasHLA genotyping included. No pipeline step falls back to whatever happens to be on the host `$PATH`; running with none of `-profile conda`/`docker`/`singularity`/`apptainer` fails with an explicit message naming the missing tool. See [Dependencies and profiles](#dependencies-and-profiles).
 
 > [!NOTE]
 > `-profile test`'s bundled RNA fixture is deliberately tiny and does not carry real HLA allele signal, so arcasHLA genotypes it as empty. Since `HLA_CONSENSUS`, `HLAPM`, and STAR indexing/alignment now always run, a real (non-stub) `-profile test` run will fail once it reaches `HLA_CONSENSUS`/`HLAPM` with no allele calls to consense. At this development stage, `-profile test` is validated with `-stub-run` (`nextflow run . -profile test -stub-run --outdir <OUTDIR>`), which proves process/channel wiring without needing real tool output. A real, non-stub `-profile test` run is not expected to succeed yet.

@@ -21,6 +21,7 @@ The pipeline can use results of [NF-Core RNASeq](https://nf-co.re/rnaseq/latest)
 <!-- TODO nf-core: Include a figure that guides the user through the major workflow steps. Many nf-core
      workflows use the "tube map" design for that. See https://nf-co.re/docs/guidelines/graphic_design/workflow_diagrams#examples for examples.   -->
 
+- Check up front that `--gtf`'s HLA-region annotation has a one-to-one `gene_name` <-> `gene_id` mapping, and stop immediately if it does not (stock GENCODE is rejected - see [usage docs](docs/usage.md#gtf-hla-gene-id-uniqueness-check))
 - Extract MHC region and unmapped reads from RNASeq data
 - Validate the extracted paired FASTQ files before arcasHLA analysis
 - Call HLA reference alleles from RNASeq data with arcasHLA

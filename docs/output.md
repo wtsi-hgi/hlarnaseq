@@ -20,6 +20,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 - [HLApm STAR index](#hlapm-star-index) - Deduplicated STAR genome indexing of personalized HLA allele references
 - [HLApm STAR alignment](#hlapm-star-alignment) - STAR alignment of RNA reads against personalized per-sample-per-allele indexes
 - [HLApm read quantification](#hlapm-read-quantification) - Queryname-sorted BAMs, cohort-wide combined GTF, per-read edit-distance/gene-assignment tables, and per-gene read-count summaries
+- [GTF HLA gene-id uniqueness check](#gtf-hla-gene-id-uniqueness-check) - Fail-fast validation that `--gtf`'s HLA-region annotation has a one-to-one `gene_name` <-> `gene_id` mapping
 - [Whole-genome common-reference gene counts](#whole-genome-common-reference-gene-counts) - Per-sample whole-genome featureCounts gene-count tables from each RNA sample's original BAM
 - [HLA-region per-read featureCounts reconciliation input](#hla-region-per-read-featurecounts-reconciliation-input) - Per-read, per-sample gene assignment table from the HLA-region-restricted subset of each RNA sample's original BAM
 - [HLA read-count reconciliation diff table](#hla-read-count-reconciliation-diff-table) - Per-sample, per-gene diff table reconciling the HLA-region featureCounts table against the personalized-HLA per-read quantification
@@ -177,6 +178,24 @@ For every RNA sample, the pipeline queryname-sorts each of that sample's per-all
 
 A new `HLAPM_SUMMARIZE_READCOUNTS` step then turns that per-read table into the per-gene `<rna_id>.HLA_gene_summary.tsv` read-count summary described above, using a new `bin/summarize_hla_readcounts.R` script (adapted from `davenportlab/HLApm_farm_pipeline`'s summarization script), run from the [shared data-tools container](usage.md#shared-data-tools-container). Per-allele-level read counts, a cross-sample combined gene-count table, and comparison against `featureCounts` ground truth remain out of scope for this iteration.
 
+### GTF HLA gene-id uniqueness check
+
+<details markdown="1">
+<summary>Output files</summary>
+
+- `gtf_hla_gene_id_check/`
+  - `hla_region_gene_id_map.tsv`: one run-level provenance table (a few hundred rows for a real whole-genome GTF), listing every gene name this check considered in scope, sorted by `gene_name`. Columns:
+    - `gene_name`: the in-scope gene name.
+    - `gene_ids`: every distinct `gene_id` carrying that `gene_name` anywhere in `--gtf` (not just inside `--hla_region`), semicolon-joined in first-appearance-in-file order.
+    - `n_gene_ids`: the number of ids in the previous column - `1` on a GTF the pipeline accepts.
+    - `in_region`: `yes` when at least one of that name's `gene` rows overlaps `--hla_region`.
+    - `hla_prefixed`: `yes` when the name starts with `HLA-` (a name can be in scope by either or both criteria).
+    - `status`: `unique`, `duplicated_gene_name` (more than one `gene_id` for this name) or `duplicated_gene_id` (this name's `gene_id` is shared with another in-scope name). Anything other than `unique` fails the run, so a published table contains only `unique` rows.
+
+</details>
+
+Produced on **every** run, before any counting or reconciliation output exists: `GTF_HLA_GENE_ID_CHECK` (`bin/check_gtf_hla_gene_ids.py`) streams `--gtf` once, `feature_type == "gene"` rows only, and rejects a GTF whose HLA-region annotation does not carry a one-to-one `gene_name` <-> `gene_id` mapping. Scope is the union of "genes overlapping `--hla_region`" and "gene names starting with `HLA-`". **Note that a failed run publishes nothing here** - a rejected GTF's offender list appears only in the Nextflow error report/`.command.err`, which is why that message is uncapped. Stock GENCODE v50 is rejected; see [usage docs](usage.md#gtf-hla-gene-id-uniqueness-check) for the full scope definition, the failure message and how to fix a GTF.
+
 ### Whole-genome common-reference gene counts
 
 <details markdown="1">
@@ -217,7 +236,7 @@ For every RNA sample, independent of `--sample_key`/HLApm, the pipeline runs `SU
   - `<rna_id>.gene_id_resolution_warnings.tsv`: always produced alongside the diff table above (header-only when there is nothing to report), recording every `gene_name` in that sample's diff table whose `gene_id` did not come from a normal, unambiguous `--gtf` lookup. One row per such `gene_name`, with columns:
     - `gene_name`: the gene name being resolved.
     - `category`: `hla`/`non_hla`, matching the diff table's own `category` column.
-    - `reason`: `ambiguous_gene_id` (more than one distinct `gene_id` found for this name in `--gtf`) or `missing_gene_name` (name absent from `--gtf` entirely).
+    - `reason`: `ambiguous_gene_id` (more than one distinct `gene_id` found for this name in `--gtf`) or `missing_gene_name` (name absent from `--gtf` entirely). `ambiguous_gene_id` is now effectively unreachable for HLA-region genes: the [GTF HLA gene-id uniqueness check](#gtf-hla-gene-id-uniqueness-check) rejects such a `--gtf` before this step runs, over exactly the set of names this table can report. It remains in the schema as defence in depth for a name outside that check's scope; `missing_gene_name` is unaffected and still a soft fail.
     - `gene_ids`: every candidate `gene_id` found for this name in `--gtf`, semicolon-joined in first-appearance order; empty when `reason` is `missing_gene_name`.
     - `resolution`: `first_id_used` (HLA-category ambiguity, resolved to the first-appearing id), `all_ids_joined` (non-HLA-category ambiguity, resolved to every candidate id joined), or `na_placeholder` (missing name, resolved to `NA`).
     - `resolved_gene_id`: the exact value written into that gene name's row's `gene_id` field in `<rna_id>.hla_readcount_reconcile.tsv`.

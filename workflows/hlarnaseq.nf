@@ -17,6 +17,7 @@ include { HLAPM_STAR_QUANTIFY    } from '../subworkflows/local/hlapm_star_quanti
 include { COUNTS_COMMONREF       } from '../subworkflows/local/counts_commonref'
 include { COUNTS_COMMONREF_HLA   } from '../subworkflows/local/counts_commonref_hla'
 include { HLA_READCOUNT_RECONCILE } from '../subworkflows/local/hla_readcount_reconcile'
+include { GTF_HLA_GENE_ID_CHECK  } from '../modules/local/gtf_hla_gene_id_check'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -65,6 +66,37 @@ workflow HLARNASEQ {
     // COUNTS_COMMONREF has no other module and so emits no versions
     // channel of its own to mix in here.
     ch_gtf = Channel.value(file(params.gtf, checkIfExists: true))
+
+    // Fail fast on a --gtf whose HLA-region annotation does not carry a
+    // one-to-one gene_name <-> gene_id mapping, before any counting or
+    // reconciliation result is produced. Called at the very front of the
+    // workflow body so it is submitted in the first scheduling wave and
+    // completes in seconds; conf/modules.config gives it
+    // errorStrategy 'terminate' so a bad GTF aborts the run at once instead
+    // of letting an hours-long ARCASHLA_GENOTYPE/STAR task finish first
+    // (conf/base.config's default 'finish'). RNA analysis is unconditional -
+    // --rna_samples and --gtf are both required parameters - so this check
+    // runs on every launchable run and there is no configuration that skips
+    // it. See docs/usage.md#gtf-hla-gene-id-uniqueness-check for why
+    // ambiguity is rejected here rather than resolved softly downstream.
+    GTF_HLA_GENE_ID_CHECK(ch_gtf)
+    ch_versions = ch_versions.mix(GTF_HLA_GENE_ID_CHECK.out.versions)
+    ch_gtf_hla_gene_id_report = GTF_HLA_GENE_ID_CHECK.out.report
+
+    // Report-gated view of the same GTF, for the one consumer whose output
+    // actually depends on gene_name -> gene_id resolution
+    // (HLA_READCOUNT_RECONCILE, below): combining rather than re-emitting the
+    // GTF from the check avoids staging a multi-GB file as a process output,
+    // and .first() restores value-channel (broadcast) semantics so the
+    // per-sample consumer can reuse it. COUNTS_COMMONREF and
+    // COUNTS_COMMONREF_HLA keep the plain ch_gtf: both run featureCounts with
+    // `-g gene_id` (conf/modules.config), so name ambiguity cannot affect
+    // their output.
+    ch_gtf_checked = ch_gtf
+        .combine(ch_gtf_hla_gene_id_report)
+        .map { gtf, _report -> gtf }
+        .first()
+
     COUNTS_COMMONREF(ch_rna_samplesheet, ch_gtf)
     ch_counts_commonref_gene_counts = COUNTS_COMMONREF.out.gene_counts
     ch_counts_commonref_summary = COUNTS_COMMONREF.out.summary
@@ -156,7 +188,11 @@ workflow HLARNASEQ {
     // through --sample_key/HLApm to at least one personalized allele - i.e.
     // present in ch_hlapm_edit_distance - get a diff table (inner join on
     // rna_id, performed inside HLA_READCOUNT_RECONCILE itself).
-    HLA_READCOUNT_RECONCILE(ch_counts_commonref_hla_read_gene_assignments, ch_hlapm_edit_distance, ch_gtf)
+    // ch_gtf_checked, not ch_gtf: this is the step whose gene_id resolution
+    // the new GTF_HLA_GENE_ID_CHECK protects, so the dependency edge makes it
+    // structurally impossible to produce a diff table from an unchecked GTF
+    // (same file, same value-channel shape - only an added ordering edge).
+    HLA_READCOUNT_RECONCILE(ch_counts_commonref_hla_read_gene_assignments, ch_hlapm_edit_distance, ch_gtf_checked)
     ch_versions = ch_versions.mix(HLA_READCOUNT_RECONCILE.out.versions)
     ch_hla_readcount_diff = HLA_READCOUNT_RECONCILE.out.read_count_diff
     ch_hla_readcount_diff_warnings = HLA_READCOUNT_RECONCILE.out.gene_id_resolution_warnings
@@ -212,6 +248,7 @@ workflow HLARNASEQ {
     hlapm_star_align_rna_sample_alleles = ch_hlapm_star_align_rna_sample_alleles // channel: [ path("rna_sample_alleles.csv") ]
     hlapm_edit_distance = ch_hlapm_edit_distance // channel: [ val(meta), path("*.edit_distance.tsv") ], meta.id == rna_id
     hlapm_gene_summary = ch_hlapm_gene_summary // channel: [ val(meta), path("*.HLA_gene_summary.tsv") ], meta.id == rna_id
+    gtf_hla_gene_id_report = ch_gtf_hla_gene_id_report // channel: [ path("hla_region_gene_id_map.tsv") ]
     counts_commonref_gene_counts = ch_counts_commonref_gene_counts // channel: [ val(meta), path("*featureCounts.tsv") ], meta.id == rna_id
     counts_commonref_summary = ch_counts_commonref_summary // channel: [ val(meta), path("*featureCounts.tsv.summary") ], meta.id == rna_id
     counts_commonref_hla_read_gene_assignments = ch_counts_commonref_hla_read_gene_assignments // channel: [ val(meta), path("*.rnaseq_featurecounts.tsv") ], meta.id == rna_id

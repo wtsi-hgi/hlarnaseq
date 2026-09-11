@@ -1,0 +1,12 @@
+#!genome-build fixture
+#!genome-version fixture
+# mhc_unique.gtf plus two in-region offenders, one per failure direction:
+#   HLA-A       two gene rows, two distinct gene_ids -> duplicated_gene_name
+#   MICA/MICB   two gene rows sharing one gene_id    -> duplicated_gene_id
+chr6	fixture	gene	29942532	29945870	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	fixture	exon	29942532	29945870	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	fixture	gene	29946000	29948000	.	+	.	gene_id "ENSG_HLA_A_DUP"; gene_name "HLA-A";
+chr6	fixture	gene	31353875	31357188	.	-	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";
+chr6	fixture	gene	31399784	31415315	.	+	.	gene_id "ENSG_MIC_SHARED"; gene_name "MICA";
+chr6	fixture	gene	31462658	31478901	.	+	.	gene_id "ENSG_MIC_SHARED"; gene_name "MICB";
+chr1	fixture	gene	1000	2000	.	+	.	gene_id "ENSG_GENE_X"; gene_name "GENE_X";

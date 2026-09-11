@@ -56,6 +56,15 @@ nextflow_pipeline {
                 { assert new File("$outputDir/hlapm/quantify/RNA_SAMPLE_1/RNA_SAMPLE_1.edit_distance.tsv").size() > 0 },
                 { assert new File("$outputDir/hlapm/quantify/RNA_SAMPLE_1/RNA_SAMPLE_1.stat.txt").exists() },
                 { assert new File("$outputDir/hlapm/quantify/RNA_SAMPLE_1/RNA_SAMPLE_1.HLA_gene_summary.tsv").size() > 0 },
+                // GTF_HLA_GENE_ID_CHECK: run on every launchable run (--gtf is
+                // a required parameter), before any counting/reconciliation
+                // output exists. Exercised here via its REAL script - the
+                // module deliberately has no stub: block - against
+                // -profile test's placeholder.gtf, which has no HLA-region and
+                // no HLA--prefixed gene, so the check passes with a
+                // "0 genes overlap --hla_region" warning and a header-only
+                // report.
+                { assert new File("$outputDir/gtf_hla_gene_id_check/hla_region_gene_id_map.tsv").text.readLines() == ['gene_name\tgene_ids\tn_gene_ids\tin_region\thla_prefixed\tstatus'] },
                 // COUNTS_COMMONREF: whole-genome featureCounts run once per
                 // RNA sample against its original BAM + --gtf, independent
                 // of --sample_key/HLApm, exercised here in stub form via
@@ -173,6 +182,44 @@ nextflow_pipeline {
                 { assert workflow.stdout.any { it.contains('Validation of pipeline parameters failed!') } },
                 // nf-schema writes the invalid-input detail to stderr, not stdout.
                 { assert workflow.stderr.any { it.contains('Missing required parameter(s): gtf') } }
+            )
+        }
+    }
+
+    test("-profile test fails when --gtf has a duplicated HLA-region gene name") {
+
+        // GTF_HLA_GENE_ID_CHECK has no stub: block, so this exercises the
+        // real check even under -stub-run. Only --gtf is overridden; every
+        // other input stays as conf/test.config sets it, which is the point -
+        // there is no configuration a user can pick that skips this check.
+        options "-stub-run"
+
+        config "../conf/test.config"
+
+        when {
+            params {
+                gtf    = "$projectDir/tests/fixtures/gtf_hla_gene_id_check/mhc_duplicate.gtf"
+                outdir = "$outputDir"
+            }
+        }
+
+        then {
+            // At pipeline level nf-test leaves workflow.errorReport empty for
+            // a task failure (unlike a process-level test); the task's
+            // "Command error:" block, and with it the full offender list, is
+            // part of Nextflow's own console output.
+            def console = workflow.stdout.join('\n')
+
+            assertAll(
+                { assert workflow.failed },
+                { assert console.contains('non-unique gene_name <-> gene_id mapping') },
+                { assert console.contains('HLA-A  ENSG_HLA_A, ENSG_HLA_A_DUP   duplicated_gene_name') },
+                // Both failure directions are reported, uncapped.
+                { assert console.contains('ENSG_MIC_SHARED') },
+                { assert console.contains('duplicated_gene_id') },
+                // errorStrategy 'terminate' plus the ch_gtf_checked gate: no
+                // reconciliation output can be produced from a rejected GTF.
+                { assert !new File("$outputDir/hla_readcount_reconcile").exists() }
             )
         }
     }
