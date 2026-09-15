@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Build one of the pipeline's large out-of-band reference datasets.
+#
+# A thin dispatcher over scripts/build_arcashla_reference.sh and
+# scripts/build_reference_hlala.sh. Both run inside the same pinned container
+# image the corresponding module runs, so the reference is produced by the exact
+# build that will later consume it - there is no separate environment to set up,
+# and nothing here comes from your shell.
+set -euo pipefail
+
+# Resolve symlinks before looking for lib/common.sh: these commands may be
+# reached through a symlink farm rather than directly on PATH, and plain
+# dirname on BASH_SOURCE would then point at the farm, not at the deploy tree.
+# Inlined rather than shared because this runs before common.sh is available.
+_self="${BASH_SOURCE[0]}"
+if readlink -f / >/dev/null 2>&1; then
+    _self="$(readlink -f -- "${_self}")"
+fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${_self}")" &>/dev/null && pwd -P)"
+# shellcheck source=../lib/common.sh
+source "${SCRIPT_DIR}/../lib/common.sh"
+
+declare -A KINDS=(
+    [arcashla]=build_arcashla_reference.sh
+    [hlala]=build_reference_hlala.sh
+)
+
+usage() {
+    cat <<EOF
+Usage:
+  hlarnaseq-build-reference <kind> <output-dir> [extra arguments...]
+
+Kinds:
+  arcashla   arcasHLA IMGT/HLA + kallisto reference, pinned to IMGT/HLA 3.52.0.
+             Pass the result as --arcashla_reference_dir.
+             Needs the arcashla image built first: hlarnaseq-build-image arcashla
+  hlala      Published HLA-LA PRG graph, fetched and then indexed twice over
+             (HLA-LA --action prepareGraph, plus bwa index over the extended
+             reference genome). Pass the result as --hlala_graph_dir.
+             Uses a public image, so nothing needs building first.
+
+Examples:
+  hlarnaseq-build-reference arcashla /lustre/scratch1xx/\$USER/hlarnaseq/arcashla-ref
+  hlarnaseq-build-reference hlala    /lustre/scratch1xx/\$USER/hlarnaseq/hla-la_graphs
+
+  !! BOTH ARE LARGE AND SLOW. arcasHLA clones the whole IMGT/HLA database
+  !! (~4 GB) and builds a kallisto index; the HLA-LA graph is a ~2.25 GB
+  !! download that ends up around 29 GB on disk, takes a few hours to index,
+  !! and prepareGraph may want up to 40 GB of memory. Do NOT run either on a
+  !! login node. Take an interactive job first:
+  !!
+  !!     bsub -Is -q long -n 2 -M 48000 \\
+  !!         -R 'select[mem>48000] rusage[mem=48000]' /bin/bash
+  !!
+  !! Both scripts pre-flight free space and refuse up front rather than failing
+  !! hours in. Put the output on Lustre, not in your home directory.
+
+These are the one legitimate operator-prepared input to this pipeline: they are
+data, not tools. Every tool still comes from its own module's conda/container.
+
+Run 'scripts/<script> -h' in the install tree for the full detail, including the
+pinned versions and the environment knobs (IMGTHLA_COMMIT, IMAGE_TAG, ...).
+Extra arguments after <output-dir> are passed through unchanged.
+
+Environment:
+  DRY_RUN=1   Print the command and exit without running it.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    exit 0
+fi
+
+if [[ $# -eq 0 ]]; then
+    echo "ERROR: no kind given." >&2
+    echo >&2
+    usage >&2
+    exit 64
+fi
+
+kind="$1"
+shift
+
+if [[ -z "${KINDS[${kind}]:-}" ]]; then
+    echo "ERROR: unknown reference kind '${kind}'." >&2
+    echo >&2
+    usage >&2
+    exit 64
+fi
+
+if [[ $# -eq 0 ]]; then
+    echo "ERROR: no output directory given for '${kind}'." >&2
+    echo >&2
+    usage >&2
+    exit 64
+fi
+
+script="${PIPELINE_DIR}/scripts/${KINDS[${kind}]}"
+if [[ ! -x "${script}" ]]; then
+    echo "ERROR: build script not found or not executable: ${script}" >&2
+    exit 78
+fi
+
+echo "==> ${kind}: ${script}"
+if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "DRY_RUN=1, not executing: $(hlarnaseq_print_cmd "${script}" "$@")"
+    exit 0
+fi
+
+exec "${script}" "$@"

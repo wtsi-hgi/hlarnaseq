@@ -32,7 +32,7 @@ Two things still come from outside the pipeline, and neither is a tool:
   scripts/build_image_datatools.sh
   ```
 
-  Every other image (STAR, Subread, samtools, HLA-LA, HIBAG, validatefastq) is a public Biocontainers/Galaxy-depot/Wave image that Nextflow pulls for you. Publishing the four local ones to a registry is planned; until then a fresh clone needs these builds.
+  Every other image (STAR, Subread, samtools, HLA-LA, HIBAG, validatefastq) is a public Biocontainers/Galaxy-depot/Wave image that Nextflow pulls for you. Publishing the four local ones to a registry is planned; until then a fresh clone needs these builds. On a cluster install that provides the `hlarnaseq` module, `hlarnaseq-build-image all` runs all four against the installed pipeline — see [Running on an LSF cluster](#running-on-an-lsf-cluster-sanger-module).
 
 See [`docs/environment_setup.md`](environment_setup.md) for the full per-module breakdown.
 
@@ -604,6 +604,35 @@ Every gene name in the output (HLA and non-HLA alike) is resolved to a `gene_id`
 This reconciliation - and the ambiguous-`gene_id` resolution above - operates entirely at `gene_name` granularity, never `gene_id`: the per-read `gene_id` featureCounts originally assigned (via its `XT` tag) is already discarded upstream, when [`bin/reformat_rnaseq_featurecounts.py`](#hla-region-per-read-featurecounts-reconciliation-input) converts it to `gene_name` (above) - `counts_commonref_hla`'s own per-read table never carries `gene_id` at all, so this step has no per-read `gene_id` left to work with even for a non-HLA row. This is not just an incidental data-loss inconvenience: featureCounts assigns each mate of a read pair independently, based on that mate's own overlap, so for two overlapping gene annotations that happen to share one `gene_name` (exactly the kind of annotation-duplication artifact described above - `POLR1HASP`'s two `gene_id`s are one real example: a large lncRNA locus with a smaller pseudogene entirely nested inside its span), a read pair's R1 and R2 mates can each be assigned a _different_ specific `gene_id` by featureCounts while still agreeing on `gene_name`. There is therefore no single, unambiguous `gene_id` to attribute a whole read pair to even in principle, which is why a non-HLA row's `original_fc_count`/`diff` (or an HLA row's `personalized_count`, which HLApm never associates with any whole-genome `gene_id` at all) is never split out per individual `gene_id` - the semicolon-joined-list/first-id policy above is the full extent of this step's `gene_id` resolution.
 
 See [output docs](output.md#hla-read-count-reconciliation-diff-table) for the resulting `hla_readcount_reconcile/` layout and full column schema. This step produces only the per-sample diff table; merging/patching `counts_commonref`'s whole-genome table using this diff table (the final "hijack" splice) remains a future iteration.
+
+## Running on an LSF cluster (Sanger module)
+
+If your cluster provides this pipeline as an [Environment Modules](https://modules.readthedocs.io/) module, you do not need to assemble a `nextflow run` command or remember which profiles to combine:
+
+```bash
+module load hlarnaseq/1.0
+
+hlarnaseq-bsub -params-file my_run.yml --outdir results   # head process on LSF
+hlarnaseq      -params-file my_run.yml --outdir results   # head process in this shell
+```
+
+Both commands pass every argument straight through to `nextflow run` and default to `-profile singularity,sanger`, so everything in the rest of this document applies unchanged. `hlarnaseq -h` lists the module's commands, and `hlarnaseq -v` reports which install, branch and commit you are about to run.
+
+`hlarnaseq-bsub` submits only the **Nextflow head process**. The pipeline then submits each task as its own LSF job through the `sanger` profile's executor, so that one job is small and long-lived rather than being the work itself. Its logs go to `./hlarnaseq-run-logs/<timestamp>/`, and `QUEUE=long hlarnaseq-bsub ...` overrides the queue.
+
+Two commands cover the one-off preparation described elsewhere in this document — the [four locally built images](#dependencies-and-profiles) and the large out-of-band reference datasets:
+
+```bash
+hlarnaseq-build-image all                              # needs Docker; see the deployment README
+hlarnaseq-build-reference arcashla /lustre/.../ref      # --arcashla_reference_dir
+hlarnaseq-build-reference hlala    /lustre/.../graphs   # --hlala_graph_dir
+```
+
+Neither is submitted to LSF for you. The reference builds in particular are slow and want a lot of disk and memory, so take an interactive job rather than running them on a login node — `hlarnaseq-build-reference -h` gives a `bsub -Is` line to start from.
+
+`-resume` is **not** added for you by either run command: pass it explicitly to continue a previous run in the same directory.
+
+To set this deployment up, or to understand what it does and does not handle, see [`scripts/sanger_hpc_deploy_scripts/README.md`](../scripts/sanger_hpc_deploy_scripts/README.md).
 
 ## Running the pipeline
 

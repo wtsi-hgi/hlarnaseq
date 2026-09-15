@@ -1,0 +1,59 @@
+###################
+${bold}nf-core/hlarnaseq${normal} [https://github.com/nf-core/hlarnaseq]
+Nextflow pipeline that precisely quantifies human HLA gene expression from
+RNA-seq data by building a personalized reference genome per sample.
+Usage and output documentation: docs/usage.md and docs/output.md in the install tree.
+###################
+
+This module exposes four commands:
+
+    ${bold}hlarnaseq [args...]${normal}
+        Runs the pipeline in the foreground with -profile singularity,sanger.
+        Every argument is passed straight to 'nextflow run', so anything valid
+        there is valid here. Your login session owns the head process, so use
+        screen/tmux, or hlarnaseq-bsub, for a real run.
+
+    ${bold}hlarnaseq-bsub [args...]${normal}
+        Same thing, but the Nextflow head process goes to LSF via bsub. Tasks
+        are then submitted by the pipeline itself (the 'sanger' profile's LSF
+        executor), so this one job is small and long-lived. Logs go to
+        ./hlarnaseq-run-logs/<timestamp>/. Override the queue with QUEUE=long.
+
+    ${bold}hlarnaseq-build-image <target>${normal}
+        Builds the four images that are not published to any registry:
+        datatools, arcashla, hlapm, hlapm-quantify, or 'all'. Needs Docker.
+        Run once per install, before the first run.
+
+    ${bold}hlarnaseq-build-reference <kind> <dir>${normal}
+        Builds a large out-of-band reference: 'arcashla' (--arcashla_reference_dir)
+        or 'hlala' (--hlala_graph_dir). Both are slow and want a lot of disk and
+        memory - take an interactive job first, do not use a login node.
+
+    ${bold}hlarnaseq -v${normal}    Install path, branch, commit and pipeline version.
+    ${bold}hlarnaseq -h${normal}    This text. ${bold}hlarnaseq info${normal} shows both.
+
+${bold}A profile is always required, and you get one by default.${normal}
+Nothing in this pipeline comes from your environment: every process declares its
+own conda/container, so a run with no container profile fails fast rather than
+silently using whatever is on PATH. Both wrappers therefore default to
+-profile singularity,sanger. Pass your own -profile and it is used instead.
+
+${bold}Getting started${normal}
+The pipeline requires --rna_samples, --sample_key, --gtf and
+--arcashla_reference_dir, plus one genotype source (--array_samples with
+--hibag_model, or --wgs_samples with --hlala_graph_dir - they are mutually
+exclusive). A params file is easier to review and re-run than a long command line:
+
+    ${bold}hlarnaseq-bsub -params-file my_run.yml --outdir results${normal}
+
+Add ${bold}-resume${normal} to continue a previous run in the same directory; it is not
+added for you, so a plain re-run starts from the beginning.
+
+${bold}Useful environment variables${normal}
+    NXF_SINGULARITY_CACHEDIR   Where pulled images are cached. Your site may set
+                               a shared default; setting this overrides it. The
+                               banner each run prints says which is in use.
+    QUEUE, MEM_MB, JOB_NAME    hlarnaseq-bsub head job (default queue:
+                               oversubscribed, 8000 MB).
+    HLARNASEQ_PROFILE          Replace the default profile pair entirely.
+    DRY_RUN=1                  Print the command that would run, and stop.

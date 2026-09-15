@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Build the four locally built container images, in the install tree.
+#
+# A thin dispatcher over scripts/build_image_*.sh: the build logic lives there
+# and is not duplicated or reimplemented here. The reason this wrapper exists at
+# all is the install tree - see the note in usage() below.
+set -euo pipefail
+
+# Resolve symlinks before looking for lib/common.sh: these commands may be
+# reached through a symlink farm rather than directly on PATH, and plain
+# dirname on BASH_SOURCE would then point at the farm, not at the deploy tree.
+# Inlined rather than shared because this runs before common.sh is available.
+_self="${BASH_SOURCE[0]}"
+if readlink -f / >/dev/null 2>&1; then
+    _self="$(readlink -f -- "${_self}")"
+fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${_self}")" &>/dev/null && pwd -P)"
+# shellcheck source=../lib/common.sh
+source "${SCRIPT_DIR}/../lib/common.sh"
+
+# target -> script under scripts/
+declare -A TARGETS=(
+    [datatools]=build_image_datatools.sh
+    [arcashla]=build_image_arcashla.sh
+    [hlapm]=build_image_hlapm.sh
+    [hlapm-quantify]=build_image_hlapm_quantify.sh
+)
+# datatools first: it is the image twelve modules share, so a partial run still
+# leaves the most widely used one built.
+ORDER=(datatools arcashla hlapm hlapm-quantify)
+
+usage() {
+    cat <<EOF
+Usage:
+  hlarnaseq-build-image <target>
+
+Targets:
+  datatools        shared python3 + R image, used by 12 modules
+  arcashla         ARCASHLA_GENOTYPE
+  hlapm            HLAPM_BUILD_REF
+  hlapm-quantify   HLAPM_QUANTIFY_READS
+  all              all four, in the order above
+
+Builds into this install tree:
+  ${PIPELINE_DIR}
+
+These four images are not published to any registry. The modules reference them
+by PATH - \${projectDir}/containers/datatools/datatools.sif and
+\${moduleDir}/*.sif - so the .sif files have to sit inside the install tree that
+Nextflow is run from. That is what this wrapper adds over calling
+scripts/build_image_*.sh yourself: it always builds into the installed
+pipeline, not into whatever checkout you happen to be standing in.
+
+  !! REQUIRES DOCKER. The underlying scripts build with 'docker build' and
+  !! convert via 'docker-daemon://', so they cannot run on a cluster node with
+  !! Singularity alone - they will stop with "ERROR: docker is required to build
+  !! this image". See README.md § "The four local images" for what to do about
+  !! that; it is a known limitation of this deployment, not a misconfiguration.
+
+Every other image the pipeline uses (STAR, Subread, samtools, HLA-LA, HIBAG,
+validatefastq) is a public image Nextflow pulls for you into
+NXF_SINGULARITY_CACHEDIR. None of them need this command.
+
+Per-image settings (IMAGE_TAG, SIF_PATH, HLAPM_COMMIT, PYBAM_COMMIT) are read by
+the underlying scripts from the environment; pass them that way and see
+'scripts/build_image_<name>.sh -h' for the defaults.
+
+Environment:
+  DRY_RUN=1   Print the build commands and exit without running them.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+    exit 0
+fi
+
+if [[ $# -eq 0 ]]; then
+    echo "ERROR: no target given." >&2
+    echo >&2
+    usage >&2
+    exit 64
+fi
+
+target="$1"
+shift
+
+if [[ $# -gt 0 ]]; then
+    cat >&2 <<EOF
+ERROR: unexpected argument '$1'.
+
+hlarnaseq-build-image takes a single target and no options. The underlying
+build scripts are configured through the environment instead, e.g.:
+
+    IMAGE_TAG=quay.io/hlarnaseq/datatools:1.2 hlarnaseq-build-image datatools
+EOF
+    exit 64
+fi
+
+case "${target}" in
+all) to_build=("${ORDER[@]}") ;;
+*)
+    if [[ -z "${TARGETS[${target}]:-}" ]]; then
+        echo "ERROR: unknown target '${target}'." >&2
+        echo >&2
+        usage >&2
+        exit 64
+    fi
+    to_build=("${target}")
+    ;;
+esac
+
+for name in "${to_build[@]}"; do
+    script="${PIPELINE_DIR}/scripts/${TARGETS[${name}]}"
+    if [[ ! -x "${script}" ]]; then
+        echo "ERROR: build script not found or not executable: ${script}" >&2
+        exit 78
+    fi
+    echo "==> ${name}: ${script}"
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        echo "DRY_RUN=1, not executing: $(hlarnaseq_print_cmd "${script}")"
+        continue
+    fi
+    "${script}"
+done

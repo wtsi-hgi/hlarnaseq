@@ -1,0 +1,60 @@
+#%Module1.0
+#
+# Environment Modules file for nf-core/hlarnaseq.
+#
+# ===========================================================================
+# EDIT ON DEPLOY: the two lines marked below, and nothing else.
+#
+#   1. `set install` - the absolute path of the installed pipeline repository
+#      (the directory containing main.nf), NOT this file's directory.
+#   2. the `module load` lines - the Singularity and Nextflow modules available
+#      on your cluster.
+#
+# Everything else is location-independent: the wrapper scripts find the
+# pipeline from their own path, and site values such as the container cache
+# live in scripts/sanger_hpc_deploy_scripts/site.env. See
+# scripts/sanger_hpc_deploy_scripts/README.md for the full install procedure.
+# ===========================================================================
+
+set version [file tail [module-info version [module-info name]]]
+
+# ---- EDIT (1): installed pipeline repository ------------------------------
+set install /software/hgi/pipelines/nf-core-hlarnaseq/v1.0
+
+proc ModulesHelp { } {
+    # Tcl procs do not see top-level variables implicitly: every variable used
+    # below must be listed here, or `module help` fails with
+    # `can't read "<name>": no such variable`. Add to this line if you add a
+    # variable to the text.
+    global version install
+    puts stderr "nf-core/hlarnaseq ($version) precisely quantifies human HLA gene expression from RNA-seq data by building a personalized reference genome per sample. https://github.com/nf-core/hlarnaseq"
+    puts stderr ""
+    puts stderr "This module provides four commands:"
+    puts stderr "    *hlarnaseq \[args...\] : run the pipeline in the foreground with -profile singularity,sanger. All arguments pass through to 'nextflow run'."
+    puts stderr "    *hlarnaseq-bsub \[args...\] : same, but submit the Nextflow head process to LSF. Logs land in ./hlarnaseq-run-logs/<timestamp>/. Override the queue with QUEUE=long."
+    puts stderr "    *hlarnaseq-build-image <datatools|arcashla|hlapm|hlapm-quantify|all> : build the four container images that are not published to a registry. Needs Docker; run once per install."
+    puts stderr "    *hlarnaseq-build-reference <arcashla|hlala> <dir> : build a large out-of-band reference dataset. Slow and disk-hungry - use an interactive job, not a login node."
+    puts stderr ""
+    puts stderr "    *hlarnaseq -v : install path, branch, commit and pipeline version."
+    puts stderr "    *hlarnaseq -h : full help. 'hlarnaseq info' shows both."
+    puts stderr ""
+    puts stderr "A container profile is always required - every process declares its own conda/container and nothing is taken from your environment - so both run commands default to -profile singularity,sanger."
+    puts stderr ""
+    puts stderr "Usage and output documentation: $install/docs/usage.md and $install/docs/output.md"
+}
+
+module-whatis "nf-core/hlarnaseq $version: precise human HLA expression quantification from RNA-seq using personalized references (https://github.com/nf-core/hlarnaseq)"
+
+# ---- EDIT (2): cluster modules -------------------------------------------
+# Uncomment and adjust to the modules your cluster provides. The pipeline's
+# manifest requires Nextflow >= 25.04.0, so a 24.x module will NOT work.
+module load cellgen/singularity
+module load HGI/common/nextflow/26.04.0
+
+# The wrapper commands. This is the only path this module adds.
+#
+# Note that $install/bin is deliberately NOT added: those scripts are staged
+# into tasks by Nextflow and run under each module's own declared interpreter.
+# Putting them on a user PATH would invite exactly the launch-environment
+# dependency this pipeline is built to avoid.
+prepend-path PATH "$install/scripts/sanger_hpc_deploy_scripts/module_executables"

@@ -17,3 +17,11 @@ artifacts
 .nf-test.log
 .nf-test
 /testdata-make/hlarnases-testdata/
+
+# Per-site values for the HPC module deployment, edited in the install tree.
+# Tracking it would make every deployment a local modification and let a
+# `git pull` clobber site paths; site.env.example is the tracked template.
+/scripts/sanger_hpc_deploy_scripts/site.env
+
+# Head-job and Nextflow logs written by hlarnaseq-bsub into the run directory.
+hlarnaseq-run-logs/

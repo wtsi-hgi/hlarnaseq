@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# Submit `hlarnaseq` to LSF.
+#
+# This is a thin wrapper around the hlarnaseq command next door: it works out a
+# log directory, wraps that command in one `bsub` submission, and gets out of
+# the way. There is deliberately no separate job script - see the note on
+# QUOTING below for the one thing that makes a single string workable.
+#
+# Only the Nextflow head process is submitted here. It then runs the pipeline
+# with -profile singularity,sanger, and the `sanger` profile's LSF executor
+# submits each task as its own job - so this is one small, long-lived job that
+# spawns the real work, not the work itself. Nextflow runs in that job's
+# foreground, so the job's lifetime is the run's lifetime: `bjobs` tells the
+# truth and `bkill` stops the pipeline.
+set -euo pipefail
+
+# Resolve symlinks before looking for lib/common.sh: these commands may be
+# reached through a symlink farm rather than directly on PATH, and plain
+# dirname on BASH_SOURCE would then point at the farm, not at the deploy tree.
+# Inlined rather than shared because this runs before common.sh is available.
+_self="${BASH_SOURCE[0]}"
+if readlink -f / >/dev/null 2>&1; then
+    _self="$(readlink -f -- "${_self}")"
+fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${_self}")" &>/dev/null && pwd -P)"
+# shellcheck source=../lib/common.sh
+source "${SCRIPT_DIR}/../lib/common.sh"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  hlarnaseq-bsub [nextflow run arguments...]
+
+Submits `hlarnaseq` to LSF via bsub. Arguments are passed through to
+`nextflow run` unchanged, exactly as with `hlarnaseq` itself.
+
+  hlarnaseq-bsub -params-file my_run.yml --outdir results
+  QUEUE=long hlarnaseq-bsub -params-file my_run.yml --outdir results -resume
+
+Logs land in ./hlarnaseq-run-logs/<timestamp>/:
+
+  head_job.o / head_job.e   LSF stdout/stderr for the head job
+  nextflow.log              the Nextflow log for this run
+  command                   the exact command this submission ran
+
+Nothing in your working directory is overwritten between runs - each submission
+gets its own timestamped directory.
+
+Environment:
+  QUEUE       LSF queue for the head job. Default: oversubscribed
+              (or HLARNASEQ_QUEUE from site.env)
+  MEM_MB      Head-job memory reservation in MB. Default: 8000
+  JOB_NAME    LSF job name. Default: hlarnaseq.<current directory name>
+  DRY_RUN=1   Print the bsub command and exit without submitting.
+
+See `hlarnaseq -h` for the pipeline's own options.
+EOF
+}
+
+case "${1:-}" in
+-h | --help)
+    usage
+    exit 0
+    ;;
+-v | --version | version)
+    hlarnaseq_pipeline_version
+    exit 0
+    ;;
+esac
+
+if [[ $# -eq 0 ]]; then
+    echo "ERROR: no arguments given." >&2
+    echo >&2
+    usage >&2
+    exit 64
+fi
+
+QUEUE="${QUEUE:-${HLARNASEQ_QUEUE}}"
+MEM_MB="${MEM_MB:-${HLARNASEQ_MEM_MB}}"
+JOB_NAME="${JOB_NAME:-hlarnaseq.${PWD##*/}}"
+
+LOG_DIR="${PWD}/hlarnaseq-run-logs/$(date +%Y%m%d_%H%M%S)"
+
+# QUOTING: bsub concatenates its trailing command words into a single string
+# and the job runs that string through a shell, so passing argv through as
+# separate words loses the quoting on any argument containing whitespace. The
+# fix is to hand bsub ONE already-quoted string - hlarnaseq_print_cmd quotes
+# exactly what needs it - which the job's shell then re-parses back into the
+# original argv.
+#
+# hlarnaseq is called by absolute path because the job's environment is not
+# guaranteed to have the module loaded. HLARNASEQ_NXF_LOG is set inside the
+# string rather than exported here, so the submission does not depend on LSF
+# forwarding the environment. The leading cd matters: LSF starts a job in the
+# submission directory only if it exists on the execution node and otherwise
+# falls back to $HOME, and a Nextflow run is not relocatable - work/, -resume
+# and every relative path key off the launch directory - so failing is right.
+JOB_COMMAND="cd $(printf '%q' "${PWD}")"
+JOB_COMMAND+=" && export HLARNASEQ_NXF_LOG=$(printf '%q' "${LOG_DIR}/nextflow.log")"
+JOB_COMMAND+=" && exec $(hlarnaseq_print_cmd "${SCRIPT_DIR}/hlarnaseq" "$@")"
+
+BSUB_CMD=(
+    bsub
+    -q "${QUEUE}"
+    -J "${JOB_NAME}"
+    -n 1
+    -M "${MEM_MB}"
+    -R "select[mem>${MEM_MB}] rusage[mem=${MEM_MB}]"
+    -o "${LOG_DIR}/head_job.o"
+    -e "${LOG_DIR}/head_job.e"
+    "${JOB_COMMAND}"
+)
+
+if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    echo "DRY_RUN=1, not submitting:"
+    hlarnaseq_print_cmd "${BSUB_CMD[@]}"
+    echo
+    echo "the job would run:"
+    echo "  ${JOB_COMMAND}"
+    exit 0
+fi
+
+hlarnaseq_require_launcher bsub \
+    "Submit from an LSF-enabled login node, or use 'hlarnaseq' to run in the foreground."
+
+mkdir -p "${LOG_DIR}"
+printf '%s\n' "${JOB_COMMAND}" >"${LOG_DIR}/command"
+
+echo "Submitting nf-core/hlarnaseq head job"
+echo "  install: ${PIPELINE_DIR}"
+echo "  queue:   ${QUEUE} (${MEM_MB} MB)"
+echo "  logs:    ${LOG_DIR}"
+"${BSUB_CMD[@]}"
+echo
+echo "Follow the run with:  tail -f ${LOG_DIR}/head_job.o"
+echo "Kill it with:         bkill -J ${JOB_NAME}"
