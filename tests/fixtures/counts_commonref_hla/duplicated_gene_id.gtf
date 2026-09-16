@@ -1,0 +1,13 @@
+#!genome-build placeholder
+#!genome-version placeholder
+#!note ENSG_HLA_A carries two distinct gene_names on two `gene` rows, and the
+#!note assigned_reads fixture's reads ARE assigned to ENSG_HLA_A - so the
+#!note ambiguity is consumed and COUNTS_COMMONREF_HLA_REFORMAT must fail.
+#!note GTF_HLA_GENE_ID_CHECK rejects this shape as duplicated_gene_id; this
+#!note fixture exists to prove the consumer no longer silently takes the
+#!note last-read name.
+chr6	placeholder	gene	1	100	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	placeholder	exon	1	100	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	placeholder	gene	150	160	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A_OTHER";
+chr6	placeholder	gene	200	300	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";
+chr6	placeholder	exon	200	300	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";

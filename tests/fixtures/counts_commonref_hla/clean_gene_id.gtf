@@ -1,0 +1,9 @@
+#!genome-build placeholder
+#!genome-version placeholder
+#!note Baseline for the COUNTS_COMMONREF_HLA_REFORMAT tests: every gene_id has
+#!note exactly one gene_name. The reference output the
+#!note unused_duplicated_gene_id.gtf run must match byte for byte.
+chr6	placeholder	gene	1	100	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	placeholder	exon	1	100	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	placeholder	gene	200	300	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";
+chr6	placeholder	exon	200	300	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";

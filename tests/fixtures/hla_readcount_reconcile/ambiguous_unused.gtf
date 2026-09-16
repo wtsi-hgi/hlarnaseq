@@ -1,0 +1,23 @@
+#!genome-build placeholder
+#!genome-version placeholder
+#!note clean.gtf plus ambiguity that never reaches the diff table. GENE_Y has
+#!note its own featureCounts read pairs (read6) but loses none of them to HLA,
+#!note so it takes no output row; GENE_Z carries no reads at all. Both are
+#!note ambiguous here on purpose: the reconciliation must still succeed, with
+#!note output identical to the clean.gtf run. A real corrected GENCODE GTF is
+#!note this file, not ambiguous.gtf - hundreds of ambiguous gene names
+#!note genome-wide, none of them consumed.
+chr6	placeholder	gene	1	100	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	placeholder	exon	1	100	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	placeholder	gene	200	300	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";
+chr6	placeholder	exon	200	300	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";
+chr6	placeholder	gene	400	500	.	+	.	gene_id "ENSG_HLA_DRB1"; gene_name "HLA-DRB1";
+chr6	placeholder	exon	400	500	.	+	.	gene_id "ENSG_HLA_DRB1"; gene_name "HLA-DRB1";
+chr1	placeholder	gene	1	100	.	+	.	gene_id "ENSG_GENE_X"; gene_name "GENE_X";
+chr1	placeholder	exon	1	100	.	+	.	gene_id "ENSG_GENE_X"; gene_name "GENE_X";
+chr1	placeholder	gene	200	300	.	+	.	gene_id "ENSG_GENE_Y"; gene_name "GENE_Y";
+chr1	placeholder	exon	200	300	.	+	.	gene_id "ENSG_GENE_Y"; gene_name "GENE_Y";
+chr1	placeholder	gene	350	360	.	+	.	gene_id "ENSG_GENE_Y_DUP"; gene_name "GENE_Y";
+chr1	placeholder	gene	400	500	.	+	.	gene_id "ENSG_GENE_Z"; gene_name "GENE_Z";
+chr1	placeholder	exon	400	500	.	+	.	gene_id "ENSG_GENE_Z"; gene_name "GENE_Z";
+chr1	placeholder	gene	550	560	.	+	.	gene_id "ENSG_GENE_Z_DUP"; gene_name "GENE_Z";

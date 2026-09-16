@@ -1,0 +1,13 @@
+#!genome-build placeholder
+#!genome-version placeholder
+#!note The mirror image of duplicated_gene_id.gtf: the duplication sits on
+#!note ENSG_HLA_B, which no read in the assigned_reads fixture is assigned to,
+#!note while ENSG_HLA_A (the id those reads DO carry) is unambiguous. The
+#!note ambiguity is therefore never consumed and the run must succeed, with
+#!note output identical to the clean_gene_id.gtf run. This is the shape a real
+#!note corrected GENCODE GTF has - ambiguous somewhere, not where it counts.
+chr6	placeholder	gene	1	100	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	placeholder	exon	1	100	.	+	.	gene_id "ENSG_HLA_A"; gene_name "HLA-A";
+chr6	placeholder	gene	200	300	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";
+chr6	placeholder	exon	200	300	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B";
+chr6	placeholder	gene	350	360	.	+	.	gene_id "ENSG_HLA_B"; gene_name "HLA-B_OTHER";

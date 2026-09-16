@@ -1,0 +1,126 @@
+nextflow_process {
+
+    name "Test Process COUNTS_COMMONREF_HLA_REFORMAT"
+    script "../main.nf"
+    process "COUNTS_COMMONREF_HLA_REFORMAT"
+    tag "modules"
+    tag "modules_local"
+    tag "counts_commonref_hla"
+
+    // The three cases here cover this process's gene_id -> gene_name
+    // translation, which is the reverse direction of the ambiguity
+    // GTF_HLA_GENE_ID_CHECK rejects (duplicated_gene_id). All three share one
+    // tiny featureCounts `-R BAM`-style fixture: one read pair, both mates
+    // XS:Z:Assigned and XT:Z:ENSG_HLA_A.
+
+    test("translates assigned reads' gene_id to gene_name via --gtf") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/counts_commonref_hla"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/assigned_reads.featureCounts.bam", checkIfExists: true)
+                    ]
+                )
+                input[1] = Channel.of(file("\${fixtures}/clean_gene_id.gtf", checkIfExists: true))
+                """
+            }
+        }
+
+        then {
+            assert process.success
+
+            def lines = file(process.out.read_gene_assignments[0][1]).text.readLines()
+
+            assert lines[0] == 'read_name\tdirection\tgene_name\tedit_distance'
+            assert lines.size() == 3
+            assert lines[1] == 'read1\tR1\tHLA-A\t1'
+            assert lines[2] == 'read1\tR2\tHLA-A\t1'
+
+            assert file(process.out.versions[0]).exists()
+        }
+    }
+
+    test("fails loudly when a gene_id carrying reads has more than one gene_name in --gtf") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/counts_commonref_hla"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/assigned_reads.featureCounts.bam", checkIfExists: true)
+                    ]
+                )
+                input[1] = Channel.of(file("\${fixtures}/duplicated_gene_id.gtf", checkIfExists: true))
+                """
+            }
+        }
+
+        then {
+            assert process.failed
+            // 1, not 127: the environment was fine, the GTF was not.
+            assert process.exitStatus == 1
+
+            def stderr = process.errorReport ?: ''
+            assert stderr.contains('has more than one distinct gene_name in --gtf')
+
+            // The offending id and BOTH of its names are printed - silently
+            // taking the last-read name (the pre-hardening behaviour) is what
+            // this test exists to prevent.
+            assert stderr.contains('ENSG_HLA_A')
+            assert stderr.contains('HLA-A_OTHER')
+            assert stderr.contains('Summary: 1 ambiguous gene id')
+        }
+    }
+
+    test("tolerates a duplicated gene_id in --gtf that no read is assigned to") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/counts_commonref_hla"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/assigned_reads.featureCounts.bam", checkIfExists: true)
+                    ]
+                )
+                input[1] = Channel.of(file("\${fixtures}/unused_duplicated_gene_id.gtf", checkIfExists: true))
+                """
+            }
+        }
+
+        then {
+            // The counterpart to the test above: unused_duplicated_gene_id.gtf
+            // duplicates ENSG_HLA_B, which carries no read here, so the
+            // ambiguity is never consumed. A --gtf corrected only for the HLA
+            // region still carries ambiguous annotation elsewhere, and that
+            // must not fail a run - so the output has to match the clean GTF's
+            // exactly.
+            assert process.success
+
+            def lines = file(process.out.read_gene_assignments[0][1]).text.readLines()
+
+            assert lines.size() == 3
+            assert lines[1] == 'read1\tR1\tHLA-A\t1'
+            assert lines[2] == 'read1\tR2\tHLA-A\t1'
+        }
+    }
+}

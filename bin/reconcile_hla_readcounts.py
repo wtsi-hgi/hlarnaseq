@@ -13,7 +13,9 @@ inputs. Unlike the prototype, this script:
 
 - resolves every gene name appearing in the output (HLA and non-HLA alike)
   to a gene_id using the whole-genome --gtf, not just HLA--prefixed names
-  (unlike artifacts/scripts/hijack-original-featurecounts.py's helper);
+  (unlike artifacts/scripts/hijack-original-featurecounts.py's helper), and
+  refuses to guess when that resolution is ambiguous (see "Ambiguity is
+  fatal, but only where it is consumed", below);
 - reindexes the final per-HLA-gene count against the FULL set of
   post-filter personalized-HLA gene names, so a gene whose every read pair
   was dropped still appears with a count of 0 rather than silently
@@ -34,6 +36,27 @@ Logic:
      mapping has an EQUAL or BETTER (smaller) edit distance than the
      FeatureCounts assignment (reassigned_to_hla).
    Otherwise it is dropped (dropped_due_to_better_non_hla).
+
+Ambiguity is fatal, but only where it is consumed
+-------------------------------------------------
+A gene_name that maps to more than one distinct gene_id in --gtf cannot be
+resolved to the single gene_id the downstream count-matrix patching step needs,
+so this script refuses to pick one and fails the task instead (exit 1, with
+every offender printed to stderr).
+
+That failure is deliberately keyed to *consumption*, not to presence. The
+upstream GTF_HLA_GENE_ID_CHECK resolves ambiguity only inside --hla_region
+(plus HLA--prefixed names anywhere), so a --gtf that legitimately passes it
+still contains ambiguous gene names genome-wide - a real GENCODE v50 primary
+assembly has 484 of them, only 4 of them HLA. Those must not fail a run. Only a
+gene_name that actually takes a row in this sample's diff table has its gene_id
+resolved at all (see build_output_rows()), and therefore only such a name can
+be an offender; load_gene_name_to_ids() keeps reading the whole GTF and keeps
+building multi-id entries without complaint.
+
+A gene_name absent from --gtf entirely stays a soft fail (gene_id "NA"):
+GTF_HLA_GENE_ID_CHECK cannot vouch for a name that is not in the GTF, and a
+personalized-reference-only or renamed gene symbol is legitimate.
 """
 
 import argparse
@@ -50,6 +73,25 @@ description = (
     "assignments (the HLA-region-restricted subset) and emit a per-gene diff table.\n\n"
     "See module docstring for the full read-pair classification logic."
 )
+
+
+class AmbiguousGeneIdError(Exception):
+    """
+    Raised when a gene_name that takes a row in this sample's diff table maps
+    to more than one distinct gene_id in --gtf.
+
+    Carries every offender so the caller can print the full report in one go
+    (see report_ambiguous_offenders()) rather than aborting on the first one -
+    a user fixing their --gtf wants the whole list, and the HLA and non-HLA
+    categories are resolved in two separate calls.
+    """
+
+    def __init__(self, offenders: list) -> None:
+        super().__init__(
+            f"{len(offenders)} gene name(s) in the reconciliation output map to "
+            "more than one gene_id in --gtf"
+        )
+        self.offenders = offenders
 
 
 @dataclass(slots=True)
@@ -93,11 +135,17 @@ def load_gene_name_to_ids(gtf_path: str) -> Dict[str, List[str]]:
 
     A gene_name may legitimately map to more than one distinct gene_id (a
     real GENCODE v50 whole-genome GTF, for example, has 484 such ambiguous
-    names, including 4 HLA genes themselves - see CHANGELOG.md); this
-    function no longer treats that as fatal. Each name's ids are kept in
-    first-appearance-in-file order (a dict used as an insertion-ordered set,
-    not a Python `set`, which does not preserve file order) so that
-    resolve_gene_ids() can deterministically pick/join them.
+    names, including 4 HLA genes themselves - see CHANGELOG.md). Scanning is
+    therefore never fatal here, no matter how ambiguous the GTF is: an
+    ambiguous name only becomes an error once resolve_gene_ids() is actually
+    asked to resolve it, which happens for the names taking a row in this
+    sample's diff table and for no others. Keeping this pass tolerant is what
+    makes "genome-wide ambiguity is fine, consumed ambiguity is not" true by
+    construction rather than by argument.
+
+    Each name's ids are kept in first-appearance-in-file order (a dict used as
+    an insertion-ordered set, not a Python `set`, which does not preserve file
+    order) so that the id list reported for an offender is reproducible.
     """
     name_to_ids: Dict[str, Dict[str, None]] = {}
 
@@ -128,32 +176,34 @@ def resolve_gene_ids(
     gene_names: Iterable[str],
     gene_name_to_ids: Dict[str, List[str]],
     category: str,
-) -> tuple[Dict[str, str], list]:
+) -> tuple[Dict[str, str], list, list]:
     """
     Resolve each gene_name in gene_names to a gene_id via gene_name_to_ids,
     for a single output category ("hla" or "non_hla").
+
+    Only names that take a row in the output are passed here (see
+    build_output_rows()), which is precisely what scopes the ambiguity failure
+    below to ambiguity this sample's output actually depends on.
 
     - A gene_name absent from gene_name_to_ids (0 candidate ids) soft-fails
       to the literal string "NA" (reason=missing_gene_name).
     - A gene_name with exactly 1 candidate id resolves to it silently (no
       warning).
     - A gene_name with >1 candidate id (genuinely ambiguous in --gtf) is
-      resolved differently depending on category, per the module docstring:
-      - "hla": the first-appearing id is used (resolution=first_id_used).
-      - "non_hla": every candidate id is kept, semicolon-joined in the same
-        first-appearance order (resolution=all_ids_joined), so no id is
-        silently dropped.
-      Both cases produce a warning row (reason=ambiguous_gene_id).
+      reported as an offender and resolved to nothing: picking one id, or
+      joining them all, would put a value the downstream count-matrix patching
+      step cannot use into a published table. The caller collects offenders
+      across both categories and raises AmbiguousGeneIdError once.
 
-    Returns (name -> resolved gene_id, list of warning-row dicts for this
-    call). Also prints the existing batched stderr summaries (unchanged from
-    before, kept for `.command.log`/interactive runs) in addition to, not
-    instead of, the structured warning rows.
+    Returns (name -> resolved gene_id, list of warning-row dicts, list of
+    offender dicts) for this call. Also prints the batched missing-name stderr
+    summary (unchanged, kept for `.command.log`/interactive runs) in addition
+    to, not instead of, the structured warning rows.
     """
     resolved: Dict[str, str] = {}
     warning_rows: list = []
+    offenders: list = []
     missing = []
-    ambiguous = []
 
     for name in gene_names:
         ids = gene_name_to_ids.get(name, [])
@@ -174,24 +224,9 @@ def resolve_gene_ids(
         elif len(ids) == 1:
             resolved[name] = ids[0]
         else:
-            ambiguous.append(name)
-            if category == "hla":
-                resolved_id = ids[0]
-                resolution = "first_id_used"
-            else:
-                resolved_id = ";".join(ids)
-                resolution = "all_ids_joined"
-            resolved[name] = resolved_id
-            warning_rows.append(
-                {
-                    "gene_name": name,
-                    "category": category,
-                    "reason": "ambiguous_gene_id",
-                    "gene_ids": ";".join(ids),
-                    "resolution": resolution,
-                    "resolved_gene_id": resolved_id,
-                }
-            )
+            # Left out of `resolved` on purpose: there is no correct value to
+            # put there, and the caller aborts before building any row.
+            offenders.append({"gene_name": name, "category": category, "gene_ids": ids})
 
     if missing:
         examples = ", ".join(sorted(missing)[:5])
@@ -201,16 +236,59 @@ def resolve_gene_ids(
             file=sys.stderr,
         )
 
-    if ambiguous:
-        examples = ", ".join(sorted(ambiguous)[:5])
+    return resolved, warning_rows, offenders
+
+
+def report_ambiguous_offenders(offenders: list, gtf_path: str) -> None:
+    """
+    Print EVERY offending gene_name to stderr - uncapped, deliberately, and in
+    the same shape as bin/check_gtf_hla_gene_ids.py's own report_offenders():
+    a failed Nextflow task publishes nothing, so this is the only copy of the
+    list the user gets without digging into the task work directory.
+
+    A trailing one-line summary repeats the verdict and the offending names, so
+    the verdict survives Nextflow's last-~50-lines truncation of the error
+    block even when the per-name list above it is long.
+    """
+    name_width = max(len(offender["gene_name"]) for offender in offenders)
+    category_width = max(len(offender["category"]) for offender in offenders)
+
+    print(
+        "ERROR: a gene_name in this sample's HLA read-count reconciliation output "
+        "maps to more than one distinct gene_id in --gtf",
+        file=sys.stderr,
+    )
+    print(
+        f"       ({len(offenders)} offending gene "
+        f"{'name' if len(offenders) == 1 else 'names'}, --gtf = {gtf_path}).",
+        file=sys.stderr,
+    )
+
+    for offender in offenders:
         print(
-            f"WARNING: {len(ambiguous)} {category} gene name(s) map to more than one distinct "
-            f"gene_id in --gtf; see gene_id_resolution_warnings output for details. "
-            f"Examples: {examples}",
+            f"  {offender['gene_name'].ljust(name_width)}  "
+            f"{offender['category'].ljust(category_width)}  "
+            f"{', '.join(offender['gene_ids'])}",
             file=sys.stderr,
         )
 
-    return resolved, warning_rows
+    print(
+        f"Summary: {len(offenders)} ambiguous gene "
+        f"{'name' if len(offenders) == 1 else 'names'} in the reconciliation output - "
+        f"{', '.join(offender['gene_name'] for offender in offenders)}",
+        file=sys.stderr,
+    )
+    print(
+        "Each of these takes a row in the diff table, so its gene_id is consumed by "
+        "the count-matrix patching step and cannot be one of several candidates. "
+        "Ambiguous gene names elsewhere in --gtf are fine and are not reported here - "
+        "only names that reached this output are. GTF_HLA_GENE_ID_CHECK normally "
+        "rejects such a --gtf before this step runs, so reaching this message means a "
+        "name got here from outside that check's scope (see "
+        "docs/usage.md#gtf-hla-gene-id-uniqueness-check). Fix --gtf for the names "
+        "above (drop or rename the duplicate gene rows) and re-run.",
+        file=sys.stderr,
+    )
 
 
 def write_warnings_tsv(path: str, warning_rows: list) -> None:
@@ -401,15 +479,32 @@ def build_output_rows(
     once per category since hla_counts.index/fc_negative_counts.index are
     already exactly the HLA/non-HLA partition. Returns (output table, list
     of gene-id-resolution warning-row dicts from both calls, combined).
+
+    These two index lists are the ONLY gene names whose gene_id is ever
+    resolved, and so the only ones that can trigger AmbiguousGeneIdError -
+    the whole basis of the "only ambiguity that reaches the output is fatal"
+    rule (see the module docstring). A gene that is ambiguous in --gtf but
+    takes no row here - an off-region gene, or a non-HLA gene that kept every
+    read pair - is never looked up and never fails the run. Do not resolve
+    names outside these two lists (e.g. every fc_pairs gene) without
+    revisiting that rule.
+
+    Both categories are resolved before either is allowed to fail, so one run
+    reports every offender rather than only the HLA ones.
     """
     fc_pair_counts = fc_pairs["fc_gene"].value_counts()
 
-    hla_gene_ids, hla_warning_rows = resolve_gene_ids(
+    hla_gene_ids, hla_warning_rows, hla_offenders = resolve_gene_ids(
         sorted(hla_counts.index), gene_name_to_ids, category="hla"
     )
-    non_hla_gene_ids, non_hla_warning_rows = resolve_gene_ids(
+    non_hla_gene_ids, non_hla_warning_rows, non_hla_offenders = resolve_gene_ids(
         sorted(fc_negative_counts.index), gene_name_to_ids, category="non_hla"
     )
+
+    offenders = hla_offenders + non_hla_offenders
+    if offenders:
+        raise AmbiguousGeneIdError(offenders)
+
     gene_ids = {**hla_gene_ids, **non_hla_gene_ids}
     warning_rows = hla_warning_rows + non_hla_warning_rows
 
@@ -456,7 +551,7 @@ def print_stats(stats: Stats) -> None:
     print(f"dropped_due_to_better_non_hla\t{stats.dropped_due_to_better_non_hla}", file=sys.stderr)
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -493,7 +588,19 @@ def main() -> None:
     fc_pairs = load_filtered_featurecounts(args.featurecounts)
 
     hla_counts, fc_negative_counts, stats = reconcile(personref, fc_pairs)
-    output_table, warning_rows = build_output_rows(hla_counts, fc_negative_counts, fc_pairs, gene_name_to_ids)
+
+    # Nothing is written on an ambiguity failure: exit 1 before producing the
+    # diff table or the warnings TSV, so no partial or guessed-at gene_id can
+    # be published (a failed Nextflow task publishes nothing either way, but
+    # this also keeps a direct, non-Nextflow invocation from leaving a
+    # half-written output behind).
+    try:
+        output_table, warning_rows = build_output_rows(
+            hla_counts, fc_negative_counts, fc_pairs, gene_name_to_ids
+        )
+    except AmbiguousGeneIdError as error:
+        report_ambiguous_offenders(error.offenders, args.gtf)
+        return 1
 
     out_handle = sys.stdout if args.output == "-" else open(args.output, "w", encoding="utf-8")
     try:
@@ -505,7 +612,8 @@ def main() -> None:
     write_warnings_tsv(args.warnings_output, warning_rows)
 
     print_stats(stats)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

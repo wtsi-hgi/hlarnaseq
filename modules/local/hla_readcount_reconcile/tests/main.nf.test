@@ -74,7 +74,7 @@ nextflow_process {
         }
     }
 
-    test("resolves ambiguous gene names deterministically instead of hard-failing, and records them in the warnings file") {
+    test("fails loudly when a gene_name taking a row in the diff table maps to more than one gene_id in --gtf") {
 
         when {
             params {
@@ -97,6 +97,62 @@ nextflow_process {
         }
 
         then {
+            assert process.failed
+            // 1, not 127: the environment was fine, the GTF was not. Matches
+            // GTF_HLA_GENE_ID_CHECK's own exit-status convention.
+            assert process.exitStatus == 1
+
+            // Every offender is printed to stderr in full - a failed task
+            // publishes nothing, so this message is the user's only copy.
+            def stderr = process.errorReport ?: ''
+            assert stderr.contains('maps to more than one distinct gene_id in --gtf')
+
+            // Both categories are reported by ONE run: the two resolve passes
+            // are collected before either is allowed to fail, so a user fixing
+            // their GTF sees the whole list rather than only the HLA half.
+            assert stderr.contains('HLA-A')
+            assert stderr.contains('ENSG_HLA_A_DUP')
+            assert stderr.contains('GENE_X')
+            assert stderr.contains('ENSG_GENE_X_DUP')
+
+            // The trailing summary line survives Nextflow's stderr truncation.
+            assert stderr.contains('Summary: 2 ambiguous gene names')
+
+            // Nothing was published: no softly-resolved gene_id escapes.
+            assert !stderr.contains('first_id_used')
+            assert !stderr.contains('all_ids_joined')
+        }
+    }
+
+    test("tolerates ambiguity in --gtf that never reaches the diff table") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/hla_readcount_reconcile"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/sample.rnaseq_featurecounts.tsv", checkIfExists: true),
+                        file("\${fixtures}/sample.edit_distance.tsv", checkIfExists: true)
+                    ]
+                )
+                input[1] = Channel.of(file("\${fixtures}/ambiguous_unused.gtf", checkIfExists: true))
+                """
+            }
+        }
+
+        then {
+            // The counterpart to the test above, and the reason the failure is
+            // keyed to consumption rather than presence: GTF_HLA_GENE_ID_CHECK
+            // only resolves ambiguity inside --hla_region, so a --gtf that
+            // legitimately passes it still carries ambiguous gene names
+            // genome-wide (a real GENCODE v50 primary assembly has 484). This
+            // must not fail the run.
             assert process.success
 
             def rows = file(process.out.read_count_diff[0][1]).text
@@ -104,30 +160,26 @@ nextflow_process {
                 .drop(1)
                 .collect { it.split('\t', -1) }
 
-            // HLA-A is ambiguous in ambiguous.gtf (ENSG_HLA_A then
-            // ENSG_HLA_A_DUP, in that file order) - the HLA category
-            // resolves to the first-appearing id, not a hard failure.
-            assert rows.count { it[1] == 'HLA-A' && it[0] == 'ENSG_HLA_A' } == 1
+            // ambiguous_unused.gtf is clean.gtf plus a duplicate gene_id for
+            // GENE_Y (which has its own featureCounts read pairs but loses
+            // none to HLA, so takes no row) and for GENE_Z (no reads at all).
+            // Neither is ever resolved, so the output must be exactly the
+            // first test's - same four rows, same single gene_ids.
+            assert rows.size() == 4
+            assert rows.count { it[0] == 'ENSG_HLA_A' && it[1] == 'HLA-A' && it[2] == 'hla' && it[3] == '1' && it[4] == '2' && it[5] == '1' } == 1
+            assert rows.count { it[0] == 'ENSG_HLA_B' && it[1] == 'HLA-B' && it[2] == 'hla' && it[3] == '0' && it[4] == '1' && it[5] == '1' } == 1
+            assert rows.count { it[0] == 'ENSG_HLA_DRB1' && it[1] == 'HLA-DRB1' && it[2] == 'hla' && it[3] == '0' && it[4] == '0' && it[5] == '0' } == 1
+            assert rows.count { it[0] == 'ENSG_GENE_X' && it[1] == 'GENE_X' && it[2] == 'non_hla' && it[3] == '3' && it[4] == 'NA' && it[5] == '-1' } == 1
 
-            // GENE_X is ambiguous in ambiguous.gtf (ENSG_GENE_X then
-            // ENSG_GENE_X_DUP, in that file order) - the non_hla category
-            // resolves to the semicolon-joined full, ordered id list.
-            assert rows.count { it[1] == 'GENE_X' && it[0] == 'ENSG_GENE_X;ENSG_GENE_X_DUP' } == 1
+            // No id was joined or first-picked anywhere, and GENE_Y/GENE_Z
+            // never appear at all.
+            assert rows.every { !it[0].contains(';') }
+            assert rows.every { it[1] != 'GENE_Y' && it[1] != 'GENE_Z' }
 
-            def warning_rows = file(process.out.gene_id_resolution_warnings[0][1]).text
-                .readLines()
-                .drop(1)
-                .collect { it.split('\t', -1) }
-
-            assert warning_rows.count {
-                it[0] == 'HLA-A' && it[1] == 'hla' && it[2] == 'ambiguous_gene_id' &&
-                it[3] == 'ENSG_HLA_A;ENSG_HLA_A_DUP' && it[4] == 'first_id_used' && it[5] == 'ENSG_HLA_A'
-            } == 1
-
-            assert warning_rows.count {
-                it[0] == 'GENE_X' && it[1] == 'non_hla' && it[2] == 'ambiguous_gene_id' &&
-                it[3] == 'ENSG_GENE_X;ENSG_GENE_X_DUP' && it[4] == 'all_ids_joined' && it[5] == 'ENSG_GENE_X;ENSG_GENE_X_DUP'
-            } == 1
+            // And the ambiguity is not even reported: the warnings file stays
+            // header-only, exactly as on the clean GTF.
+            def warnings_lines = file(process.out.gene_id_resolution_warnings[0][1]).text.readLines()
+            assert warnings_lines.size() == 1
         }
     }
 

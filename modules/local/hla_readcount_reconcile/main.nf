@@ -61,6 +61,15 @@ process HLA_READCOUNT_RECONCILE_DIFF {
     // would trip load_personref_table()/reconcile()'s "all rows must be HLA
     // genes" integrity check) - the stub instead writes header-only
     // placeholder outputs with the new column schemas.
+    //
+    // The warnings file keeps all six columns even though only
+    // reason=missing_gene_name / resolution=na_placeholder are still
+    // reachable: an ambiguous gene_name that takes a row in the diff table now
+    // fails the task outright (exit 1) instead of being resolved to a first or
+    // joined id and recorded here. See the header of
+    // bin/reconcile_hla_readcounts.py for why that failure is scoped to
+    // ambiguity the output actually consumes, so that the hundreds of
+    // ambiguous names a corrected GENCODE GTF still carries do not fail a run.
     """
     printf 'gene_id\\tgene_name\\tcategory\\toriginal_fc_count\\tpersonalized_count\\tdiff\\n' > "${meta.id}.hla_readcount_reconcile.tsv"
     printf 'gene_name\\tcategory\\treason\\tgene_ids\\tresolution\\tresolved_gene_id\\n' > "${meta.id}.gene_id_resolution_warnings.tsv"
