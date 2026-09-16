@@ -8,7 +8,7 @@ Build it with [`scripts/build_image_datatools.sh`](../../scripts/build_image_dat
 
 Every other environment in this repository lives next to the single module that
 uses it, and each module's `conda` directive points at `${moduleDir}/environment.yml`.
-This one is shared by twelve modules:
+This one is shared by thirteen modules:
 
 | Module                          | Script                                 | Uses                                    |
 | ------------------------------- | -------------------------------------- | --------------------------------------- |
@@ -18,6 +18,7 @@ This one is shared by twelve modules:
 | `HLAPM_SUMMARIZE_READCOUNTS`    | `bin/summarize_hla_readcounts.R`       | dplyr, tidyr                            |
 | `HLA_READCOUNT_RECONCILE_DIFF`  | `bin/reconcile_hla_readcounts.py`      | python3, pandas                         |
 | `GTF_HLA_GENE_ID_CHECK`         | `bin/check_gtf_hla_gene_ids.py`        | python3 (stdlib only)                   |
+| `COMBINE_FINAL_COUNTS_PATCH`    | `bin/combine_final_counts.py`          | python3 (stdlib only)                   |
 | `COUNTS_COMMONREF_HLA_REFORMAT` | `bin/reformat_rnaseq_featurecounts.py` | samtools, python3 (stdlib only)         |
 | `HLALA_COMBINE`                 | inline shell                           | bash, coreutils, awk                    |
 | `HIBAG_COMBINE`                 | inline shell                           | bash, coreutils, awk                    |
@@ -26,11 +27,11 @@ This one is shared by twelve modules:
 | `HLAPM_RESOLVE_SAMPLE_ALLELES`  | inline shell                           | bash, coreutils                         |
 
 These are small data transformations over the same two interpreters and a POSIX
-shell, with overlapping package lists. Twelve module-local copies would give
-slightly smaller `-profile conda` environments, at the cost of twelve specs that
-must be kept in step with each other and with one image - exactly the drift this
-repository avoids elsewhere by deriving `conda` and `container` from a single
-file. So all twelve point their `conda` directive at
+shell, with overlapping package lists. Thirteen module-local copies would give
+slightly smaller `-profile conda` environments, at the cost of thirteen specs
+that must be kept in step with each other and with one image - exactly the drift
+this repository avoids elsewhere by deriving `conda` and `container` from a
+single file. So all thirteen point their `conda` directive at
 `${projectDir}/containers/datatools/environment.yml` and their `container`
 directive at the image built from it.
 
@@ -65,7 +66,7 @@ than one samtools version.
 
 Add it to `environment.yml`, pinned, then rebuild and bump the image tag
 (`IMAGE_TAG` in `scripts/build_image_datatools.sh`, and the `container`
-directive in each of the twelve modules - they must agree). Bump the tag
+directive in each of the thirteen modules - they must agree). Bump the tag
 whenever the environment changes, so an image and a tag always mean the same
 contents; operators build this image locally, and a moved tag with an unchanged
 name is indistinguishable from a stale build.

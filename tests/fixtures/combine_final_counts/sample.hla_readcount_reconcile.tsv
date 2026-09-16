@@ -1,0 +1,5 @@
+gene_id	gene_name	category	original_fc_count	personalized_count	diff
+ENSG_HLA_A	HLA-A	hla	78	83	5
+ENSG_HLA_B	HLA-B	hla	20	20	0
+NA	HLA-DRB3	hla	0	4	4
+ENSG_GENE_X	GENE_X	non_hla	40	NA	-3

@@ -1,0 +1,86 @@
+nextflow_workflow {
+
+    name "Test Subworkflow COMBINE_FINAL_COUNTS"
+    script "../main.nf"
+    workflow "COMBINE_FINAL_COUNTS"
+    tag "subworkflows"
+    tag "subworkflows_local"
+    tag "combine_final_counts"
+
+    test("joins gene_counts and read_count_diff on rna_id, emitting a final table only for samples present in both (inner join)") {
+
+        options '-stub'
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            workflow {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/combine_final_counts"
+
+                // RNA_SAMPLE_1 and RNA_SAMPLE_2 are present in both input
+                // channels; RNA_SAMPLE_3 has a whole-genome featureCounts
+                // table but no reconciliation diff table (not resolved
+                // through --sample_key/HLApm to any personalized allele) and
+                // must be silently dropped, not errored and not published
+                // unpatched under a "final" name.
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1', single_end: false, strandedness: 'reverse' ],
+                        file("\${fixtures}/sample.featureCounts.tsv", checkIfExists: true)
+                    ],
+                    [
+                        [ id: 'RNA_SAMPLE_2', single_end: false, strandedness: 'reverse' ],
+                        file("\${fixtures}/sample.featureCounts.tsv", checkIfExists: true)
+                    ],
+                    [
+                        [ id: 'RNA_SAMPLE_3', single_end: false, strandedness: 'reverse' ],
+                        file("\${fixtures}/sample.featureCounts.tsv", checkIfExists: true)
+                    ]
+                )
+                input[1] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/sample.hla_readcount_reconcile.tsv", checkIfExists: true)
+                    ],
+                    [
+                        [ id: 'RNA_SAMPLE_2' ],
+                        file("\${fixtures}/sample.hla_readcount_reconcile.tsv", checkIfExists: true)
+                    ]
+                )
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+
+            assert workflow.out.final_counts.size() == 2
+
+            def ids = workflow.out.final_counts.collect { meta, tsv -> meta.id }.sort()
+            assert ids == ['RNA_SAMPLE_1', 'RNA_SAMPLE_2']
+
+            // The reconstructed meta is a clean [id: rna_id] - the fc side's
+            // extra single_end/strandedness keys are discarded, not
+            // meaningful to this step.
+            assert workflow.out.final_counts.every { meta, tsv -> meta.keySet() == ['id'] as Set }
+
+            assert workflow.out.final_counts.every { meta, tsv -> file(tsv).exists() }
+
+            // The change log is produced for the same, inner-joined set of
+            // samples as the final table.
+            assert workflow.out.change_log.size() == 2
+
+            def log_ids = workflow.out.change_log.collect { meta, tsv -> meta.id }.sort()
+            assert log_ids == ['RNA_SAMPLE_1', 'RNA_SAMPLE_2']
+
+            assert workflow.out.change_log.every { meta, tsv -> file(tsv).exists() }
+
+            // RNA_SAMPLE_3 appears nowhere: no final table, no change log,
+            // no error.
+            assert workflow.out.final_counts.every { meta, tsv -> meta.id != 'RNA_SAMPLE_3' }
+            assert workflow.out.change_log.every { meta, tsv -> meta.id != 'RNA_SAMPLE_3' }
+        }
+    }
+}

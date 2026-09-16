@@ -17,6 +17,7 @@ include { HLAPM_STAR_QUANTIFY    } from '../subworkflows/local/hlapm_star_quanti
 include { COUNTS_COMMONREF       } from '../subworkflows/local/counts_commonref'
 include { COUNTS_COMMONREF_HLA   } from '../subworkflows/local/counts_commonref_hla'
 include { HLA_READCOUNT_RECONCILE } from '../subworkflows/local/hla_readcount_reconcile'
+include { COMBINE_FINAL_COUNTS   } from '../subworkflows/local/combine_final_counts'
 include { GTF_HLA_GENE_ID_CHECK  } from '../modules/local/gtf_hla_gene_id_check'
 
 /*
@@ -197,6 +198,26 @@ workflow HLARNASEQ {
     ch_hla_readcount_diff = HLA_READCOUNT_RECONCILE.out.read_count_diff
     ch_hla_readcount_diff_warnings = HLA_READCOUNT_RECONCILE.out.gene_id_resolution_warnings
 
+    // Iteration 4 - the last - of "hijack original count matrix" (see
+    // docs/output.md): patches COUNTS_COMMONREF's whole-genome featureCounts
+    // table (ch_counts_commonref_gene_counts, produced above) with the
+    // per-sample reconciliation diff table just produced
+    // (ch_hla_readcount_diff), emitting the final two-column gene_id/count
+    // table plus a change log. No --gtf input: the diff table already carries
+    // a resolved, unambiguous gene_id for both categories and the
+    // featureCounts table is keyed by gene_id (`-g gene_id`, see
+    // conf/modules.config), so the patch is an exact gene_id join - see
+    // bin/combine_final_counts.py's header for why re-deriving a
+    // gene_name <-> gene_id mapping here is deliberately avoided. Only RNA
+    // samples present in BOTH channels get a final table (inner join on
+    // rna_id, performed inside COMBINE_FINAL_COUNTS itself); a sample not
+    // resolved to any personalized allele gets no output rather than an
+    // unpatched table published under a "final" name.
+    COMBINE_FINAL_COUNTS(ch_counts_commonref_gene_counts, ch_hla_readcount_diff)
+    ch_versions = ch_versions.mix(COMBINE_FINAL_COUNTS.out.versions)
+    ch_combine_final_counts = COMBINE_FINAL_COUNTS.out.final_counts
+    ch_combine_final_counts_change_log = COMBINE_FINAL_COUNTS.out.change_log
+
     //
     // Collate and save software versions
     //
@@ -254,6 +275,8 @@ workflow HLARNASEQ {
     counts_commonref_hla_read_gene_assignments = ch_counts_commonref_hla_read_gene_assignments // channel: [ val(meta), path("*.rnaseq_featurecounts.tsv") ], meta.id == rna_id
     hla_readcount_diff = ch_hla_readcount_diff // channel: [ val(meta), path("*.hla_readcount_reconcile.tsv") ], meta.id == rna_id, only for samples present in both counts_commonref_hla_read_gene_assignments and hlapm_edit_distance
     hla_readcount_diff_warnings = ch_hla_readcount_diff_warnings // channel: [ val(meta), path("*.gene_id_resolution_warnings.tsv") ], meta.id == rna_id, only for samples present in both counts_commonref_hla_read_gene_assignments and hlapm_edit_distance
+    combine_final_counts = ch_combine_final_counts // channel: [ val(meta), path("*.final_counts.tsv") ], meta.id == rna_id, only for samples present in both counts_commonref_gene_counts and hla_readcount_diff
+    combine_final_counts_change_log = ch_combine_final_counts_change_log // channel: [ val(meta), path("*.final_counts.change_log.tsv") ], meta.id == rna_id, only for samples present in both counts_commonref_gene_counts and hla_readcount_diff
 
 }
 

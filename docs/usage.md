@@ -419,7 +419,7 @@ Under `-profile conda` the same `environment.yml` is used, which means Conda nee
 
 #### Shared data-tools container
 
-Twelve modules do not wrap a bioinformatics tool at all - they run this repository's own small analysis scripts from `bin/`, or a few lines of inline shell:
+Thirteen modules do not wrap a bioinformatics tool at all - they run this repository's own small analysis scripts from `bin/`, or a few lines of inline shell:
 
 | Module                          | Script                                                                   |
 | ------------------------------- | ------------------------------------------------------------------------ |
@@ -429,6 +429,7 @@ Twelve modules do not wrap a bioinformatics tool at all - they run this reposito
 | `HLAPM_SUMMARIZE_READCOUNTS`    | `summarize_hla_readcounts.R` (dplyr, tidyr)                              |
 | `HLA_READCOUNT_RECONCILE_DIFF`  | `reconcile_hla_readcounts.py` (python3, pandas)                          |
 | `GTF_HLA_GENE_ID_CHECK`         | `check_gtf_hla_gene_ids.py` (python3)                                    |
+| `COMBINE_FINAL_COUNTS_PATCH`    | `combine_final_counts.py` (python3)                                      |
 | `COUNTS_COMMONREF_HLA_REFORMAT` | `reformat_rnaseq_featurecounts.py` (python3) + `samtools`                |
 | `HLALA_COMBINE`                 | inline shell (bash, coreutils, awk)                                      |
 | `HIBAG_COMBINE`                 | inline shell (bash, coreutils, awk)                                      |
@@ -436,7 +437,7 @@ Twelve modules do not wrap a bioinformatics tool at all - they run this reposito
 | `HLAPM_LIST_STAR_TARGETS`       | inline shell (bash, coreutils, findutils)                                |
 | `HLAPM_RESOLVE_SAMPLE_ALLELES`  | inline shell (bash, coreutils)                                           |
 
-All twelve share one environment, [`containers/datatools/environment.yml`](../containers/datatools/environment.yml), and one image built from it. Unlike every other environment file here it is not module-local, because twelve near-identical copies of an overlapping package list would drift apart; see [`containers/datatools/README.md`](../containers/datatools/README.md).
+All thirteen share one environment, [`containers/datatools/environment.yml`](../containers/datatools/environment.yml), and one image built from it. Unlike every other environment file here it is not module-local, because thirteen near-identical copies of an overlapping package list would drift apart; see [`containers/datatools/README.md`](../containers/datatools/README.md).
 
 `COUNTS_COMMONREF_HLA_REFORMAT` is why that environment also carries `samtools` (pinned to **1.24**, the same version `ARCASHLA_EXTRACT` and the vendored `SAMTOOLS_SORT` use, so the pipeline never runs two samtools versions): it needs `samtools` and `python3` together, and no prebuilt public image pairs them. The five inline-shell modules add nothing to the environment - `bash`, coreutils, `awk`, `findutils` and `grep` come from the image's base OS under a container profile and from the host under `-profile conda` - but they point at it so they declare a reproducible environment rather than none at all.
 
@@ -446,12 +447,12 @@ Build it once before running with a container profile:
 scripts/build_image_datatools.sh
 ```
 
-This builds `quay.io/hlarnaseq/datatools:1.1` and the local `containers/datatools/datatools.sif`, following the same local-image pattern as the other images described above. Under `-profile conda`, Nextflow creates the one environment and all twelve modules share it.
+This builds `quay.io/hlarnaseq/datatools:1.1` and the local `containers/datatools/datatools.sif`, following the same local-image pattern as the other images described above. Under `-profile conda`, Nextflow creates the one environment and all thirteen modules share it.
 
 > [!IMPORTANT]
 > The image tag moved from `:1.0` to `:1.1` when `samtools` was added. If you built the image before that, **rebuild it** - a run under `-profile docker` will otherwise fail to find `quay.io/hlarnaseq/datatools:1.1` in the local image store, and `-profile singularity`/`apptainer` will silently use a stale `.sif` with no `samtools`.
 
-Package versions are pinned to those the pipeline's existing published results were produced with, so containerizing these steps changes no output. Running any of these twelve modules with no `-profile conda`/`docker`/`singularity`/`apptainer` now fails fast with a message naming those profiles, instead of silently using whichever `python3`/`Rscript`/`samtools` happens to be on the host `PATH` - the same trade already made for `ARCASHLA_EXTRACT`, `HIBAG_PREDICT` and `HLAPM_BUILD_REF`.
+Package versions are pinned to those the pipeline's existing published results were produced with, so containerizing these steps changes no output. Running any of these thirteen modules with no `-profile conda`/`docker`/`singularity`/`apptainer` now fails fast with a message naming those profiles, instead of silently using whichever `python3`/`Rscript`/`samtools` happens to be on the host `PATH` - the same trade already made for `ARCASHLA_EXTRACT`, `HIBAG_PREDICT` and `HLAPM_BUILD_REF`.
 
 ## GTF HLA gene-id uniqueness check
 
@@ -579,17 +580,17 @@ This step reuses the `SUBREAD_FEATURECOUNTS` module unmodified, pinned to **Subr
 
 `docker` and `apptainer` work the same way, and `-profile conda` builds the module's pinned `environment.yml` (`bioconda::subread=2.1.1`) instead - with the same "less thoroughly verified" caveat noted for STAR above.
 
-See [output docs](output.md#whole-genome-common-reference-gene-counts) for the resulting `counts_commonref/` layout. Patching these whole-genome counts with `HLAPM_STAR_QUANTIFY`'s HLA-specific counts (the final splice of the "hijack original count matrix" step) remains explicitly out of scope for this iteration; the per-gene reconciliation diff feeding that future step is produced by [HLA read-count reconciliation diff table](#hla-read-count-reconciliation-diff-table), below.
+See [output docs](output.md#whole-genome-common-reference-gene-counts) for the resulting `counts_commonref/` layout. These whole-genome counts are published unpatched, for provenance: they are patched with `HLAPM_STAR_QUANTIFY`'s HLA-specific counts downstream, via the per-gene reconciliation diff produced by [HLA read-count reconciliation diff table](#hla-read-count-reconciliation-diff-table) and then applied by [Final combined gene counts](#final-combined-gene-counts), both below.
 
 ## HLA-region per-read featureCounts reconciliation input
 
-Independent of `--sample_key`/HLApm, the pipeline also produces a per-read gene-assignment table for the HLA-region-restricted subset of each RNA sample's original BAM - the second of three steps so far toward the "hijack original count matrix" roadmap item. Unlike [Whole-genome common-reference gene counts](#whole-genome-common-reference-gene-counts) above (which is independent of/parallel to `ARCASHLA`), this step runs _after_ `ARCASHLA`, because it reuses `ARCASHLA_EXTRACT`'s own intermediate HLA-region BAM (`arcashla/extracted/<rna_id>.mhc.namesort.bam`, see [output docs](output.md#arcashla-read-extraction-and-validation)) rather than extracting the HLA region a second time from scratch. No new region-extraction dependency is introduced by this step.
+Independent of `--sample_key`/HLApm, the pipeline also produces a per-read gene-assignment table for the HLA-region-restricted subset of each RNA sample's original BAM - the second of the four steps making up the "hijack original count matrix" roadmap item. Unlike [Whole-genome common-reference gene counts](#whole-genome-common-reference-gene-counts) above (which is independent of/parallel to `ARCASHLA`), this step runs _after_ `ARCASHLA`, because it reuses `ARCASHLA_EXTRACT`'s own intermediate HLA-region BAM (`arcashla/extracted/<rna_id>.mhc.namesort.bam`, see [output docs](output.md#arcashla-read-extraction-and-validation)) rather than extracting the HLA region a second time from scratch. No new region-extraction dependency is introduced by this step.
 
 `SUBREAD_FEATURECOUNTS` (aliased `SUBREAD_FEATURECOUNTS_HLA`, a second invocation of the same vendored module used above) runs with `-R BAM` against that intermediate BAM and the same cohort-wide `--gtf` reference already used above - no separate HLA-only GTF is built or required. This module has been patched (`nf-core modules patch subread/featurecounts`) to additionally capture the `-R BAM` per-read reannotated BAM as a declared output (previously an unexposed side effect of `-R BAM`); the patch also fixes an unrelated, pre-existing version-reporting defect (see `CHANGELOG.md`). The reannotated BAM is then converted to plain text with `samtools view`, filtered to `Assigned`-status lines, and reformatted into a `read_name`, `direction`, `gene_name`, `edit_distance` TSV by a new `bin/reformat_rnaseq_featurecounts.py` script. Both steps run inside `COUNTS_COMMONREF_HLA_REFORMAT`, which provisions its own `samtools` and `python3` from the [shared data-tools container](#shared-data-tools-container) - they are no longer expected on the host `$PATH`. (`SUBREAD_FEATURECOUNTS_HLA` itself continues the same container/`-profile conda` exception as `SUBREAD_FEATURECOUNTS` above.)
 
 `reformat_rnaseq_featurecounts.py` translates each read's assigned `gene_id` (featureCounts' `XT` tag) back to a `gene_name` via the same `--gtf`, which is the mirror image of the reconciliation's lookup below - and it fails the same way, for the same reason. A `gene_id` that carries reads here but has more than one distinct `gene_name` in `--gtf` (the `duplicated_gene_id` direction the [GTF HLA gene-id uniqueness check](#gtf-hla-gene-id-uniqueness-check) also rejects) fails the task with exit status 1 and prints the offending ids and all of their names, rather than silently adopting whichever name appeared last in the file and attributing the reads to the wrong gene. As below, the failure is scoped to consumption: only a `gene_id` actually carried by an assigned read is checked, so a duplicated `gene_id` elsewhere in `--gtf` does not fail the run. A `gene_id` with no `gene_name` at all is unaffected and still stands in for its own name.
 
-See [output docs](output.md#hla-region-per-read-featurecounts-reconciliation-input) for the resulting `counts_commonref_hla/` layout. This step itself stops at producing the per-read table; reconciling it against `HLAPM_STAR_QUANTIFY`'s HLA-specific `edit_distance.tsv` is described immediately below. The final splice into `counts_commonref`'s whole-genome table (the "hijack" step itself) remains out of scope for this iteration.
+See [output docs](output.md#hla-region-per-read-featurecounts-reconciliation-input) for the resulting `counts_commonref_hla/` layout. This step itself stops at producing the per-read table; reconciling it against `HLAPM_STAR_QUANTIFY`'s HLA-specific `edit_distance.tsv` is described immediately below, and the final splice into `counts_commonref`'s whole-genome table (the "hijack" step itself) in [Final combined gene counts](#final-combined-gene-counts) after that.
 
 ## HLA read-count reconciliation diff table
 
@@ -611,7 +612,37 @@ In practice the failure should be unreachable: the [GTF HLA gene-id uniqueness c
 
 This reconciliation - and the `gene_id` lookup above - operates entirely at `gene_name` granularity, never `gene_id`: the per-read `gene_id` featureCounts originally assigned (via its `XT` tag) is already discarded upstream, when [`bin/reformat_rnaseq_featurecounts.py`](#hla-region-per-read-featurecounts-reconciliation-input) converts it to `gene_name` (above) - `counts_commonref_hla`'s own per-read table never carries `gene_id` at all, so this step has no per-read `gene_id` left to work with even for a non-HLA row. This is not just an incidental data-loss inconvenience: featureCounts assigns each mate of a read pair independently, based on that mate's own overlap, so for two overlapping gene annotations that happen to share one `gene_name` (exactly the kind of annotation-duplication artifact described above - `POLR1HASP`'s two `gene_id`s are one real example: a large lncRNA locus with a smaller pseudogene entirely nested inside its span), a read pair's R1 and R2 mates can each be assigned a _different_ specific `gene_id` by featureCounts while still agreeing on `gene_name`. There is therefore no single, unambiguous `gene_id` to attribute a whole read pair to even in principle, which is why a non-HLA row's `original_fc_count`/`diff` (or an HLA row's `personalized_count`, which HLApm never associates with any whole-genome `gene_id` at all) is never split out per individual `gene_id` - the single-`gene_id`-per-`gene_name` lookup above (or a hard failure when that name has no single id) is the full extent of this step's `gene_id` resolution.
 
-See [output docs](output.md#hla-read-count-reconciliation-diff-table) for the resulting `hla_readcount_reconcile/` layout and full column schema. This step produces only the per-sample diff table; merging/patching `counts_commonref`'s whole-genome table using this diff table (the final "hijack" splice) remains a future iteration.
+See [output docs](output.md#hla-read-count-reconciliation-diff-table) for the resulting `hla_readcount_reconcile/` layout and full column schema. This step produces only the per-sample diff table; applying it to `counts_commonref`'s whole-genome table (the final "hijack" splice) is the next section.
+
+## Final combined gene counts
+
+Whenever an RNA sample has both a whole-genome `counts_commonref` gene-count table ([Whole-genome common-reference gene counts](#whole-genome-common-reference-gene-counts), above) and an `hla_readcount_reconcile` diff table (immediately above) - i.e. only samples resolved through `--sample_key`/HLApm to at least one personalized allele - the pipeline patches the former with the latter, via a new `COMBINE_FINAL_COUNTS` subworkflow (`COMBINE_FINAL_COUNTS_PATCH` module) and a new `bin/combine_final_counts.py` script. This is iteration 4, the last, of the "hijack original count matrix" roadmap item, and adapts `artifacts/scripts/hijack-original-featurecounts.py`. Samples not resolved to any personalized-HLA allele get no final table at all - an expected inner-join outcome, and deliberately preferred to publishing an unpatched copy of the whole-genome table under a "final" name.
+
+The patch is a straight `gene_id` join:
+
+- a `category: hla` diff row **replaces** that `gene_id`'s count with the personalized-reference count (`personalized_count`);
+- a `category: non_hla` diff row **adjusts** that `gene_id`'s count by the (negative) `diff`;
+- every other gene keeps its original whole-genome count.
+
+Row order and the row key set of the output are exactly `counts_commonref`'s, so per-sample columns stay joinable into a cohort matrix; every row, patched HLA rows included, is keyed by `gene_id`. The script also does the raw-table conversion itself: `counts_commonref`'s published table is featureCounts' native 7-column output (`Geneid`, `Chr`, `Start`, `End`, `Strand`, `Length`, plus one count column), and the final table is a two-column projection of it. See [output docs](output.md#final-combined-gene-counts) for the resulting `combine_final_counts/` layout and the change log's full column schema.
+
+**No `--gtf` is needed for this step**, unlike the prototype script it replaces. That script keyed its HLA replacements by `gene_name` and so re-derived a `gene_name` -> `gene_id` mapping itself, with an HLA-only, "first seen wins" helper. Here the diff table already carries a resolved, unambiguous `gene_id` for both categories (see above) and the whole-genome table is keyed by `gene_id` (featureCounts' `-g gene_id`), so a third, independent gene-name resolution path would only reintroduce the loose behaviour the [GTF HLA gene-id uniqueness check](#gtf-hla-gene-id-uniqueness-check) and the reconciliation's own strict lookup were added to remove.
+
+### Missing is soft, wrong is fatal
+
+- A diff row whose `gene_id` is the literal `NA` is **skipped**, and the run continues. This is the reconciliation's deliberate soft-fail for a gene name absent from `--gtf`, and a real cohort hits it (`HLA-DRB3`: reconciled to read pairs, no `gene_id`). Failing here would reject runs the upstream step intentionally accepts. Every such gene is recorded in `<rna_id>.final_counts.change_log.tsv` as `unapplied_missing_gene_id` and warned about on stderr, so nothing is lost silently - but **its read pairs do not reach the final table**, so a cohort's final counts under-count exactly those HLA genes missing from `--gtf`. The fix is upstream: annotate the gene in `--gtf` (`bin/patch_gtf_gene_ids.py` can rename or remove genes out of band), not here.
+- A diff row whose `gene_id` is **not** `NA` but is absent from the whole-genome table **fails the task** (exit status 1). Both tables are built from the same `--gtf`, so this can only mean the two counting steps saw different annotation.
+- A resulting count **below zero fails the task** (exit status 1). A `non_hla` `diff` is computed against the HLA-region-restricted featureCounts run while the count being patched comes from the whole-genome run, so the two are not arithmetically guaranteed to fit. A negative count is never a publishable number.
+
+Both fatal classes are collected across the whole table before either is allowed to fail, and every offender is printed to stderr uncapped, so one run gives you the complete list. Nothing is written on failure.
+
+### Counts are read pairs, and that is asserted
+
+The final table counts **read pairs** (fragments), not reads. The reconciled personalized-HLA counts are read pairs by construction, so the whole-genome table has to be counted the same way for the two to be comparable - and in this pipeline it always is, since `conf/modules.config` passes `--countReadPairs` to `SUBREAD_FEATURECOUNTS` and every RNA sample is treated as paired-end (so featureCounts also gets `-p`).
+
+Rather than offer the prototype's `--fc-is-paired` switch and its x2 read-pairs-to-reads rescale, the script **asserts** that unit: it parses the `# Program:...Command:` line featureCounts writes into its own output and fails the task (exit status 1) unless that command line shows both `--countReadPairs` and `-p`. If the line is absent or unparsable, it fails too - the assumption cannot be verified, and silently assuming it is what would halve or double every HLA count. There is no CLI switch and no parameter, so the unit cannot be overridden into being wrong. A future `ext.args` edit that drops `--countReadPairs` therefore becomes a run failure with an actionable message rather than a silent rescale; any such edit needs this step reconsidered anyway.
+
+Merging these per-sample columns into a single cross-sample count **matrix** remains out of scope.
 
 ## Running on an LSF cluster (Sanger module)
 

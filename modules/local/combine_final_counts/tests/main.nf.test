@@ -1,0 +1,298 @@
+nextflow_process {
+
+    name "Test Process COMBINE_FINAL_COUNTS_PATCH"
+    script "../main.nf"
+    process "COMBINE_FINAL_COUNTS_PATCH"
+    tag "modules"
+    tag "modules_local"
+    tag "combine_final_counts"
+
+    // NOTE: nf-test's global profile is `test`, which enables no container
+    // engine, so these cases run bin/combine_final_counts.py against the HOST
+    // python3 - the same situation the existing counts_commonref_hla and
+    // hla_readcount_reconcile module tests are in. The script is stdlib-only,
+    // so any python3 >= 3.8 satisfies it; container provenance for this
+    // process is covered by the `-profile docker,test` pipeline run instead.
+
+    test("patches the whole-genome table and converts it to a two-column gene_id/count matrix column") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/combine_final_counts"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/sample.featureCounts.tsv", checkIfExists: true),
+                        file("\${fixtures}/sample.hla_readcount_reconcile.tsv", checkIfExists: true)
+                    ]
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+
+            def lines = file(process.out.final_counts[0][1]).text.readLines()
+
+            // Exactly two columns, header gene_id<TAB>count - patched HLA
+            // rows keep their gene_id key rather than being rewritten to
+            // gene_name as the prototype script did, so a cohort's per-sample
+            // columns join on one key type.
+            assert lines[0] == 'gene_id\tcount'
+            assert lines.every { it.split('\t', -1).size() == 2 }
+
+            // Row order and the row key set are exactly the featureCounts
+            // table's: 7 gene rows, same order, nothing added (HLA-DRB3's
+            // gene_id 'NA' row adds none) and nothing dropped.
+            assert lines.size() == 8
+            assert lines.drop(1).collect { it.split('\t', -1)[0] } == [
+                'ENSG_CTRL_1', 'ENSG_HLA_A', 'ENSG_HLA_B', 'ENSG_CTRL_2',
+                'ENSG_GENE_X', 'ENSG_CTRL_3', 'ENSG_GENE_Y'
+            ]
+
+            def counts = lines.drop(1).collectEntries { def f = it.split('\t', -1); [ (f[0]): f[1] ] }
+
+            // category: hla rows are REPLACED with personalized_count
+            // (100 -> 83, 50 -> 20), not adjusted.
+            assert counts['ENSG_HLA_A'] == '83'
+            assert counts['ENSG_HLA_B'] == '20'
+
+            // category: non_hla rows are ADJUSTED by the (negative) diff:
+            // 40 + (-3) = 37.
+            assert counts['ENSG_GENE_X'] == '37'
+
+            // Every gene with no diff row keeps its original whole-genome
+            // count, zero included.
+            assert counts['ENSG_CTRL_1'] == '11'
+            assert counts['ENSG_CTRL_2'] == '22'
+            assert counts['ENSG_CTRL_3'] == '0'
+            assert counts['ENSG_GENE_Y'] == '7'
+
+            def log_lines = file(process.out.change_log[0][1]).text.readLines()
+
+            // The featureCounts `# Program:` provenance line is dropped from
+            // the output table and recorded here as a leading comment instead.
+            assert log_lines[0].startsWith('# Program:featureCounts')
+            assert log_lines[0].contains('--countReadPairs')
+
+            def log_rows = log_lines.drop(2).collect { it.split('\t', -1) }
+            assert log_lines[1] == 'gene_id\tgene_name\tcategory\toriginal_count\tnew_count\taction'
+
+            // One row per gene the patch touched or could not touch - and no
+            // row for any gene it left alone.
+            assert log_rows.size() == 4
+            assert log_rows.count { it[0] == 'ENSG_HLA_A' && it[1] == 'HLA-A' && it[2] == 'hla' && it[3] == '100' && it[4] == '83' && it[5] == 'replaced_with_personalized' } == 1
+            assert log_rows.count { it[0] == 'ENSG_HLA_B' && it[1] == 'HLA-B' && it[2] == 'hla' && it[3] == '50' && it[4] == '20' && it[5] == 'replaced_with_personalized' } == 1
+            assert log_rows.count { it[0] == 'ENSG_GENE_X' && it[1] == 'GENE_X' && it[2] == 'non_hla' && it[3] == '40' && it[4] == '37' && it[5] == 'adjusted_by_diff' } == 1
+            assert log_rows.every { it[0] != 'ENSG_CTRL_1' && it[0] != 'ENSG_CTRL_2' && it[0] != 'ENSG_CTRL_3' && it[0] != 'ENSG_GENE_Y' }
+
+            assert file(process.out.versions[0]).exists()
+        }
+    }
+
+    test("soft-skips a diff row whose gene_id is NA, recording it as unapplied") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/combine_final_counts"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/sample.featureCounts.tsv", checkIfExists: true),
+                        file("\${fixtures}/sample.hla_readcount_reconcile.tsv", checkIfExists: true)
+                    ]
+                )
+                """
+            }
+        }
+
+        then {
+            // bin/reconcile_hla_readcounts.py deliberately soft-fails a gene
+            // name absent from --gtf to the literal 'NA', and a real cohort
+            // hits it (HLA-DRB3). Failing here would reject runs the upstream
+            // step intentionally accepts, so the run must succeed.
+            assert process.success
+
+            def log_rows = file(process.out.change_log[0][1]).text
+                .readLines()
+                .drop(2)
+                .collect { it.split('\t', -1) }
+
+            // Recorded, uncapped, so nothing is lost silently.
+            assert log_rows.count {
+                it[0] == 'NA' && it[1] == 'HLA-DRB3' && it[2] == 'hla' &&
+                it[3] == 'NA' && it[4] == 'NA' && it[5] == 'unapplied_missing_gene_id'
+            } == 1
+
+            // ...and no output row is added for it: the output's row key set
+            // stays exactly the featureCounts table's, so per-sample columns
+            // stay joinable across a cohort.
+            def out_lines = file(process.out.final_counts[0][1]).text.readLines()
+            assert out_lines.size() == 8
+            assert out_lines.every { !it.startsWith('NA\t') }
+            assert out_lines.every { !it.contains('HLA-DRB3') }
+        }
+    }
+
+    test("fails when patching would give a gene a negative count") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/combine_final_counts"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/sample.featureCounts.tsv", checkIfExists: true),
+                        file("\${fixtures}/negative.hla_readcount_reconcile.tsv", checkIfExists: true)
+                    ]
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.failed
+            // 1, not 127: the environment was fine, the data was not. Matches
+            // GTF_HLA_GENE_ID_CHECK's and HLA_READCOUNT_RECONCILE_DIFF's own
+            // exit-status convention.
+            assert process.exitStatus == 1
+
+            def stderr = process.errorReport ?: ''
+            assert stderr.contains('would give 1 gene(s) a negative count')
+            // Every offender is named, with the arithmetic that produced it.
+            assert stderr.contains('ENSG_GENE_X')
+            assert stderr.contains('original=40')
+            assert stderr.contains('diff=-41')
+            assert stderr.contains('result=-1')
+            // The trailing summary survives Nextflow's stderr truncation.
+            assert stderr.contains('Summary: 1 negative resulting count - ENSG_GENE_X=-1')
+        }
+    }
+
+    test("fails when a diff gene_id is absent from the whole-genome count table") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/combine_final_counts"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/sample.featureCounts.tsv", checkIfExists: true),
+                        file("\${fixtures}/unknown_gene.hla_readcount_reconcile.tsv", checkIfExists: true)
+                    ]
+                )
+                """
+            }
+        }
+
+        then {
+            // The deliberate counterpart to the soft 'NA' case above: both
+            // tables were built from the same --gtf, so a RESOLVED gene_id
+            // the whole-genome table does not carry can only mean the two
+            // steps saw different annotation.
+            assert process.failed
+            assert process.exitStatus == 1
+
+            def stderr = process.errorReport ?: ''
+            assert stderr.contains('are absent from')
+            assert stderr.contains('ENSG_NOT_IN_TABLE')
+            assert stderr.contains('Summary: 1 unknown gene id in the reconciliation diff table - ENSG_NOT_IN_TABLE')
+        }
+    }
+
+    test("fails when the whole-genome table was not counted in read pairs") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/combine_final_counts"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/sample.featureCounts.reads.tsv", checkIfExists: true),
+                        file("\${fixtures}/sample.hla_readcount_reconcile.tsv", checkIfExists: true)
+                    ]
+                )
+                """
+            }
+        }
+
+        then {
+            // The reconciled HLA counts are read pairs, so the whole-genome
+            // table must be counted the same way. The x2 rescale path the
+            // prototype's --fc-is-paired offered is deliberately NOT
+            // implemented: the unit is asserted instead, so a future
+            // ext.args edit that drops --countReadPairs becomes an
+            // actionable run failure rather than a silent rescale.
+            assert process.failed
+            assert process.exitStatus == 1
+
+            def stderr = process.errorReport ?: ''
+            assert stderr.contains('was not counted in read pairs')
+            assert stderr.contains('--countReadPairs')
+            // The observed command line is echoed back, so the diagnosis
+            // does not need the work directory.
+            assert stderr.contains('# Program:featureCounts v2.1.1')
+            assert stderr.contains('Summary: count unit mismatch')
+        }
+    }
+
+    test("fails when the count unit cannot be verified at all") {
+
+        when {
+            params {
+                outdir = "$outputDir"
+            }
+            process {
+                """
+                def fixtures = "${projectDir}/tests/fixtures/combine_final_counts"
+
+                input[0] = Channel.of(
+                    [
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${fixtures}/sample.featureCounts.noprogram.tsv", checkIfExists: true),
+                        file("\${fixtures}/sample.hla_readcount_reconcile.tsv", checkIfExists: true)
+                    ]
+                )
+                """
+            }
+        }
+
+        then {
+            // No `# Program:` line means the assumption cannot be checked,
+            // and silently assuming it is what would halve or double every
+            // HLA count - so this is a failure, not a default.
+            assert process.failed
+            assert process.exitStatus == 1
+
+            def stderr = process.errorReport ?: ''
+            assert stderr.contains("carries no '# Program:' comment line")
+            assert stderr.contains('Summary: count unit unverifiable')
+        }
+    }
+}

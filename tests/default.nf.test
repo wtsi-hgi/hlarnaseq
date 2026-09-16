@@ -93,6 +93,18 @@ nextflow_pipeline {
                 // real script would otherwise need to parse
                 // HLAPM_QUANTIFY_READS' non-HLA-prefixed stub content).
                 { assert new File("$outputDir/hla_readcount_reconcile/RNA_SAMPLE_1/RNA_SAMPLE_1.hla_readcount_reconcile.tsv").text.contains('gene_id\tgene_name\tcategory\toriginal_fc_count\tpersonalized_count\tdiff') },
+                // COMBINE_FINAL_COUNTS: iteration 4 - the last - of "hijack
+                // original count matrix". Patches counts_commonref's
+                // whole-genome featureCounts table (above) with
+                // hla_readcount_reconcile's diff table (above) into the final
+                // two-column gene_id/count table plus a change log. Exercised
+                // in stub form via COMBINE_FINAL_COUNTS_PATCH's own stub:
+                // block, which is mandatory here - SUBREAD_FEATURECOUNTS's
+                // vendored stub only `touch`es an empty *.featureCounts.tsv,
+                // so the real script's count-unit assertion and 'Geneid'
+                // header check would both (correctly) reject it.
+                { assert new File("$outputDir/combine_final_counts/RNA_SAMPLE_1/RNA_SAMPLE_1.final_counts.tsv").text.contains('gene_id\tcount') },
+                { assert new File("$outputDir/combine_final_counts/RNA_SAMPLE_1/RNA_SAMPLE_1.final_counts.change_log.tsv").text.contains('gene_id\tgene_name\tcategory\toriginal_count\tnew_count\taction') },
                 { assert snapshot(
                     // pipeline versions.yml file for multiqc from which Nextflow version is removed because we test pipelines on multiple Nextflow versions
                     removeNextflowVersion("$outputDir/pipeline_info/nf_core_hlarnaseq_software_versions.yml"),

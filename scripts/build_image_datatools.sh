@@ -32,7 +32,7 @@ no registry push required:
 Unlike the other build_image_*.sh scripts here, this image is shared rather
 than module-local; see containers/datatools/README.md. If you change
 containers/datatools/environment.yml, bump IMAGE_TAG below AND the `container`
-directive in all twelve modules above so a tag always means one set of contents.
+directive in all thirteen modules above so a tag always means one set of contents.
 
 Environment:
   IMAGE_TAG   Docker image reference to build/tag. Default: quay.io/hlarnaseq/datatools:1.1

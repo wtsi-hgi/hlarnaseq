@@ -19,6 +19,9 @@
                 "ARCASHLA_VALIDATE_FASTQ": {
                     "biopet-validatefastq": "0.1.1"
                 },
+                "COMBINE_FINAL_COUNTS_PATCH": {
+                    "python3": "unknown"
+                },
                 "COUNTS_COMMONREF_HLA_REFORMAT": {
                     "samtools": "unknown",
                     "python3": "unknown"
@@ -93,6 +96,10 @@
                 "arcashla/genotype/RNA_SAMPLE_1.genotype.log",
                 "arcashla/validation",
                 "arcashla/validation/RNA_SAMPLE_1.validatefastq.log",
+                "combine_final_counts",
+                "combine_final_counts/RNA_SAMPLE_1",
+                "combine_final_counts/RNA_SAMPLE_1/RNA_SAMPLE_1.final_counts.change_log.tsv",
+                "combine_final_counts/RNA_SAMPLE_1/RNA_SAMPLE_1.final_counts.tsv",
                 "counts_commonref",
                 "counts_commonref/RNA_SAMPLE_1",
                 "counts_commonref/RNA_SAMPLE_1/RNA_SAMPLE_1.featureCounts.tsv",
@@ -173,6 +180,8 @@
             ],
             [
                 "RNA_SAMPLE_1.mhc.namesort.bam:md5,82516f3cf3010c60cb7faeb5adb9ec22",
+                "RNA_SAMPLE_1.final_counts.change_log.tsv:md5,2965f886c9a286796e6cfcdf9b871320",
+                "RNA_SAMPLE_1.final_counts.tsv:md5,db074a5c69ea7fa02af30b958e026aac",
                 "RNA_SAMPLE_1.featureCounts.tsv:md5,d41d8cd98f00b204e9800998ecf8427e",
                 "RNA_SAMPLE_1.featureCounts.tsv.summary:md5,d41d8cd98f00b204e9800998ecf8427e",
                 "RNA_SAMPLE_1.featureCounts.tsv.summary:md5,d41d8cd98f00b204e9800998ecf8427e",

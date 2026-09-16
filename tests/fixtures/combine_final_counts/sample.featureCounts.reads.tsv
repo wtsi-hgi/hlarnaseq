@@ -1,0 +1,9 @@
+# Program:featureCounts v2.1.1; Command:"featureCounts" "-g" "gene_id" "-p" "-T" "2" "-a" "clean.gtf" "-s" "2" "-o" "RNA_SAMPLE_1.featureCounts.tsv" "RNA_SAMPLE_1.bam"
+Geneid	Chr	Start	End	Strand	Length	RNA_SAMPLE_1.bam
+ENSG_CTRL_1	chr1	1000	2000	+	1000	11
+ENSG_HLA_A	chr6	29940000	29945000	+	3500	100
+ENSG_HLA_B	chr6	31350000	31360000	-	3200	50
+ENSG_CTRL_2	chr2	5000	6000	-	1000	22
+ENSG_GENE_X	chr6	31400000	31410000	+	4000	40
+ENSG_CTRL_3	chr3	7000	8000	+	1000	0
+ENSG_GENE_Y	chr6	31500000	31510000	-	2000	7

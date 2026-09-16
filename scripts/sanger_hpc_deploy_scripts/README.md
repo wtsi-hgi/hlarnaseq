@@ -104,7 +104,7 @@ loads `HGI/common/nextflow/24.10.4`, which is too old; point the modulefile at a
 ## The four local images
 
 `ARCASHLA_GENOTYPE`, `HLAPM_BUILD_REF`, `HLAPM_QUANTIFY_READS` and the shared
-data-tools image (used by twelve modules) are **not published to any registry**.
+data-tools image (used by thirteen modules) are **not published to any registry**.
 The modules reference them by path — `${projectDir}/containers/datatools/datatools.sif`
 and `${moduleDir}/*.sif` — so the `.sif` files must physically sit inside the
 install tree Nextflow runs from, and `*.sif` is in `.gitignore`, so a fresh

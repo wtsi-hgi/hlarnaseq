@@ -13,6 +13,7 @@
 #   HLAPM_SUMMARIZE_READCOUNTS     bin/summarize_hla_readcounts.R      dplyr, tidyr
 #   HLA_READCOUNT_RECONCILE_DIFF   bin/reconcile_hla_readcounts.py     python3, pandas
 #   GTF_HLA_GENE_ID_CHECK          bin/check_gtf_hla_gene_ids.py       python3 (stdlib only)
+#   COMBINE_FINAL_COUNTS_PATCH     bin/combine_final_counts.py         python3 (stdlib only)
 #   COUNTS_COMMONREF_HLA_REFORMAT  bin/reformat_rnaseq_featurecounts.py  samtools, python3 (stdlib only)
 #   HLALA_COMBINE                  (inline shell)                      bash, coreutils, awk
 #   HIBAG_COMBINE                  (inline shell)                      bash, coreutils, awk
@@ -20,9 +21,9 @@
 #   HLAPM_LIST_STAR_TARGETS        (inline shell)                      bash, coreutils, findutils
 #   HLAPM_RESOLVE_SAMPLE_ALLELES   (inline shell)                      bash, coreutils
 #
-# One file rather than twelve near-identical module-local ones: these are small
-# data transformations over the same two interpreters plus a POSIX shell, and
-# twelve copies of an overlapping package list would drift. See
+# One file rather than thirteen near-identical module-local ones: these are
+# small data transformations over the same two interpreters plus a POSIX shell,
+# and thirteen copies of an overlapping package list would drift. See
 # containers/datatools/README.md.
 #
 # The shell-only consumers add nothing to this file: bash, coreutils, awk,
