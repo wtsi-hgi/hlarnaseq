@@ -1,7 +1,4 @@
 contact_links:
-  - name: Join nf-core
-    url: https://nf-co.re/join
-    about: Please join the nf-core community here
-  - name: "Slack #hlarnaseq channel"
-    url: https://nfcore.slack.com/channels/hlarnaseq
-    about: Discussion about the nf-core/hlarnaseq pipeline
+  - name: Email the maintainer
+    url: mailto:gz3@sanger.ac.uk
+    about: Questions and support for the wtsi-hgi/hlarnaseq pipeline (Gennadii Zakharov)

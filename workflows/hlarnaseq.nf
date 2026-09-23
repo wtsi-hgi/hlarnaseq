@@ -5,7 +5,7 @@
 */
 include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
-include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_hlarnaseq_pipeline'
+include { methodsDescriptionText } from '../subworkflows/local/utils_wtsihgi_hlarnaseq_pipeline'
 include { HLALA                  } from '../subworkflows/local/hlala'
 include { HIBAG                  } from '../subworkflows/local/hibag'
 include { ARCASHLA                } from '../subworkflows/local/arcashla'
@@ -242,7 +242,7 @@ workflow HLARNASEQ {
         .mix(topic_versions_string)
         .collectFile(
             storeDir: "${params.outdir}/pipeline_info",
-            name: 'nf_core_'  +  'hlarnaseq_software_'  + 'versions.yml',
+            name: 'wtsihgi_'  +  'hlarnaseq_software_'  + 'versions.yml',
             sort: true,
             newLine: true
         ).set { ch_collated_versions }

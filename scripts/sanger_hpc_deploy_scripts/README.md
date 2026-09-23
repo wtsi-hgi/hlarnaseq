@@ -1,7 +1,7 @@
 # Sanger HPC deployment
 
 An [Environment Modules](https://modules.readthedocs.io/) deployment of
-nf-core/hlarnaseq for an LSF cluster. After `module load hlarnaseq/1.0` a user
+wtsi-hgi/hlarnaseq for an LSF cluster. After `module load hlarnaseq/1.0` a user
 gets four commands and needs to know nothing about Nextflow profiles:
 
 | Command                                  | What it does                                                                      |
@@ -48,7 +48,7 @@ whole repository is the deployable unit.
 
 ```bash
 # 1. Install the pipeline repository at a versioned path.
-git clone https://github.com/nf-core/hlarnaseq /software/.../hlarnaseq/v1.0
+git clone https://github.com/wtsi-hgi/hlarnaseq /software/.../hlarnaseq/v1.0
 cd /software/.../hlarnaseq/v1.0
 
 # 2. Set site values (optional but recommended).

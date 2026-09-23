@@ -1,4 +1,4 @@
-# nf-core/hlarnaseq: launcher environment.
+# wtsi-hgi/hlarnaseq: launcher environment.
 #
 # This environment exists only to *launch* the pipeline and to run the
 # fixture-building scripts under testdata-make/. No pipeline step depends on

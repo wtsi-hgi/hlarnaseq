@@ -1,6 +1,6 @@
 {
-    "name": "nf-core/hlarnaseq",
-    "homePage": "https://github.com/nf-core/hlarnaseq",
+    "name": "wtsi-hgi/hlarnaseq",
+    "homePage": "https://github.com/wtsi-hgi/hlarnaseq",
     "repos": {
         "https://github.com/nf-core/modules.git": {
             "modules": {

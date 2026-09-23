@@ -41,7 +41,7 @@ PIPELINE_DIR="$(cd -- "${DEPLOY_DIR}/../.." && pwd -P)"
 
 if [[ ! -f "${PIPELINE_DIR}/main.nf" || ! -f "${PIPELINE_DIR}/nextflow.config" ]]; then
     cat >&2 <<EOF
-ERROR: cannot find the nf-core/hlarnaseq checkout.
+ERROR: cannot find the wtsi-hgi/hlarnaseq checkout.
 
 Expected main.nf and nextflow.config in:
     ${PIPELINE_DIR}
@@ -187,7 +187,7 @@ hlarnaseq_pipeline_version() {
     version="$(sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*'\(.*\)'.*/\1/p" \
         "${PIPELINE_DIR}/nextflow.config" | head -n 1)"
     cat <<EOF
-nf-core/hlarnaseq ${version:-unknown}
+wtsi-hgi/hlarnaseq ${version:-unknown}
 install: ${PIPELINE_DIR}
 branch:  ${branch}
 commit:  ${commit}

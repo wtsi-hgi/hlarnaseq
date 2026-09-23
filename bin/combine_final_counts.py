@@ -73,7 +73,7 @@ The reconciled HLA counts are read pairs (one row per read pair in
 bin/reconcile_hla_readcounts.py's output), so the whole-genome table must be
 counted the same way for the two to be comparable. In this pipeline it always
 is: conf/modules.config passes `--countReadPairs` to SUBREAD_FEATURECOUNTS and
-utils_nfcore_hlarnaseq_pipeline hardcodes `single_end: false`, so the module
+utils_wtsihgi_hlarnaseq_pipeline hardcodes `single_end: false`, so the module
 always adds `-p`.
 
 Rather than offer the prototype's `--fc-is-paired` switch and its x2

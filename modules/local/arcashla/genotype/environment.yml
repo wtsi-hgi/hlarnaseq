@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# nf-core/hlarnaseq: ARCASHLA_GENOTYPE tool environment.
+# wtsi-hgi/hlarnaseq: ARCASHLA_GENOTYPE tool environment.
 #
 # kallisto is pinned: later kallisto releases break this arcasHLA version's
 # `kallisto pseudo` output parsing. This is also the environment installed

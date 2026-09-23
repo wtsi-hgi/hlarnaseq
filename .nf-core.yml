@@ -7,12 +7,29 @@ lint:
     - .github/CONTRIBUTING.md
     - .gitignore
     - assets/sendmail_template.txt
+    # `files_unchanged` builds its reference template from `manifest.name` alone and
+    # never reads `is_nfcore` below, so with `org: wtsi-hgi` it renders a *non*-nf-core
+    # template and drops every `{% if is_nfcore %}` block. The first four below are the
+    # files it checks that carry such a block, so they can never match. `config.yml` is
+    # ignored because its nf-core Slack contact links were replaced with a maintainer
+    # email address.
+    - .github/ISSUE_TEMPLATE/bug_report.yml
+    - .github/PULL_REQUEST_TEMPLATE.md
+    - assets/email_template.txt
+    - docs/README.md
+    - .github/ISSUE_TEMPLATE/config.yml
   multiqc_config: false
   files_exist:
     - assets/multiqc_config.yml
+    # `files_exist` hardcodes an `nf-core-<name>_` prefix for the logo artwork
+    # (files_exist.py:156-162). The logos were renamed to `wtsi-hgi-hlarnaseq_*`
+    # with the pipeline, so the paths it looks for no longer exist.
+    - assets/nf-core-hlarnaseq_logo_light.png
+    - docs/images/nf-core-hlarnaseq_logo_light.png
+    - docs/images/nf-core-hlarnaseq_logo_dark.png
 
 template:
-  org: nf-core
+  org: wtsi-hgi
   name: hlarnaseq
   description: Precise analysis of human HLA RNASeq data by usign personalized references
   author: Gennadii Zakharov

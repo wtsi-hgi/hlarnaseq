@@ -1,8 +1,6 @@
-# nf-core/hlarnaseq: Usage
+# wtsi-hgi/hlarnaseq: Usage
 
-## :warning: Please read this documentation on the nf-core website: [https://nf-co.re/hlarnaseq/usage](https://nf-co.re/hlarnaseq/usage)
-
-> _Documentation of pipeline parameters is generated automatically from the pipeline schema and can no longer be found in markdown files._
+> _Documentation of pipeline parameters is generated automatically from the pipeline schema and can no longer be found in markdown files. Run `nextflow run wtsi-hgi/hlarnaseq --help_full` for the complete parameter list._
 
 ## Introduction
 
@@ -139,7 +137,7 @@ The prepared HLA-LA **graph**, however, remains a required, separately-prepared 
 Provide the **parent** directory containing the prepared graph with `--hlala_graph_dir`, and the **graph directory's own name** with `--hlala_graph` (defaults to `PRG_MHC_GRCh38_withIMGT`) - i.e. the graph the pipeline uses is `<hlala_graph_dir>/<hlala_graph>`.
 
 ```bash
-nextflow run nf-core/hlarnaseq \
+nextflow run wtsi-hgi/hlarnaseq \
     --rna_samples ./rna_samples.csv \
     --hla_region chr6:28500000-33400000 \
     --wgs_samples ./wgs_samples.csv \
@@ -678,7 +676,7 @@ To set this deployment up, or to understand what it does and does not handle, se
 The typical command for running the pipeline is as follows:
 
 ```bash
-nextflow run nf-core/hlarnaseq \
+nextflow run wtsi-hgi/hlarnaseq \
     --rna_samples ./rna_samples.csv \
     --sample_key ./rna_wgs_key.csv \
     --hla_region chr6:28500000-33400000 \
@@ -713,7 +711,7 @@ Pipeline settings can be provided in a `yaml` or `json` file via `-params-file <
 The above pipeline run specified with a params file in yaml format:
 
 ```bash
-nextflow run nf-core/hlarnaseq -profile docker -params-file params.yaml
+nextflow run wtsi-hgi/hlarnaseq -profile docker -params-file params.yaml
 ```
 
 with:
@@ -726,21 +724,23 @@ genome: 'GRCh38'
 <...>
 ```
 
-You can also generate such `YAML`/`JSON` files via [nf-core/launch](https://nf-co.re/launch).
+You can also generate such `YAML`/`JSON` files from the pipeline schema with
+`nf-core pipelines launch .` against a local checkout. (The web launcher at
+`nf-co.re/launch` only serves official nf-core pipelines, so it cannot be used here.)
 
 ### Updating the pipeline
 
 When you run the above command, Nextflow automatically pulls the pipeline code from GitHub and stores it as a cached version. When running the pipeline after this, it will always use the cached version if available - even if the pipeline has been updated since. To make sure that you're running the latest version of the pipeline, make sure that you regularly update the cached version of the pipeline:
 
 ```bash
-nextflow pull nf-core/hlarnaseq
+nextflow pull wtsi-hgi/hlarnaseq
 ```
 
 ### Reproducibility
 
 It is a good idea to specify the pipeline version when running the pipeline on your data. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since.
 
-First, go to the [nf-core/hlarnaseq releases page](https://github.com/nf-core/hlarnaseq/releases) and find the latest pipeline version - numeric only (eg. `1.3.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r 1.3.1`. Of course, you can switch to another version by changing the number after the `-r` flag.
+First, go to the [wtsi-hgi/hlarnaseq releases page](https://github.com/wtsi-hgi/hlarnaseq/releases) and find the latest pipeline version - numeric only (eg. `1.3.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r 1.3.1`. Of course, you can switch to another version by changing the number after the `-r` flag.
 
 This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future.
 
@@ -826,7 +826,11 @@ In most cases, you will only need to create a custom config as a one-off but if 
 
 See the main [Nextflow documentation](https://www.nextflow.io/docs/latest/config.html) for more information about creating your own configuration files.
 
-If you have any questions or issues please send us a message on [Slack](https://nf-co.re/join/slack) on the [`#configs` channel](https://nfcore.slack.com/channels/configs).
+Questions about the shared institutional configs themselves belong in the
+[`nf-core/configs`](https://github.com/nf-core/configs/issues) repository. For
+questions about **this** pipeline, open an issue on
+[GitHub](https://github.com/wtsi-hgi/hlarnaseq/issues) or contact
+Gennadii Zakharov <gz3@sanger.ac.uk>.
 
 ## Running in the background
 

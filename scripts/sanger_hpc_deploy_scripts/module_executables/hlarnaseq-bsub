@@ -126,7 +126,7 @@ hlarnaseq_require_launcher bsub \
 mkdir -p "${LOG_DIR}"
 printf '%s\n' "${JOB_COMMAND}" >"${LOG_DIR}/command"
 
-echo "Submitting nf-core/hlarnaseq head job"
+echo "Submitting wtsi-hgi/hlarnaseq head job"
 echo "  install: ${PIPELINE_DIR}"
 echo "  queue:   ${QUEUE} (${MEM_MB} MB)"
 echo "  logs:    ${LOG_DIR}"

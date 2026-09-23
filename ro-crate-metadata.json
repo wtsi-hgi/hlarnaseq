@@ -1,6 +1,6 @@
 {
     "@context": [
-        "https://w3id.org/ro/crate/1.1/context",
+        "https://w3id.org/ro/crate/1.2/context",
         {
             "GithubService": "https://w3id.org/ro/terms/test#GithubService",
             "JenkinsService": "https://w3id.org/ro/terms/test#JenkinsService",
@@ -22,14 +22,17 @@
             "@id": "./",
             "@type": "Dataset",
             "creativeWorkStatus": "InProgress",
-            "datePublished": "2026-03-20T13:31:23+00:00",
-            "description": "<h1>\n  HLARNASeq\n</h1>\n\n<!-- Commented due to the early stage of development\n[![run with conda](http://img.shields.io/badge/run%20with-conda-3EB049?labelColor=000000&logo=anaconda)](https://docs.conda.io/en/latest/)\n[![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)\n[![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)\n-->\n\n## Introduction\n\n**HLARNASeq** is a bioinformatics pipeline that\nprecisely qualifies human HLA genes expression from RNASeq data\nby using personalized reference genomes.\n\nThe pipeline can use results of [NF-Core RNASeq](https://nf-co.re/rnaseq/latest) pipeline as input.\n\n### Pipeline scheme\n\n<!-- TODO nf-core: Include a figure that guides the user through the major workflow steps. Many nf-core\n     workflows use the \"tube map\" design for that. See https://nf-co.re/docs/guidelines/graphic_design/workflow_diagrams#examples for examples.   -->\n\n- Extract MHC region and unmapped reads from RNASeq data\n- Validate the extracted paired FASTQ files before arcasHLA analysis\n- Call HLA reference alleles from RNASeq data with arcasHLA\n- (Optional) Call HLA reference alleles from WGS/WES data with HLA-LA, **or** impute them from SNP-array data with HIBAG (the two are mutually exclusive)\n- Call HLA allele consensus on RNASeq and WGS/WES data\n- Map RNASeq data to personalized references\n- Extract HLA genes counts\n- Hijack original count matrix\n\n## Usage\n\n> [!NOTE]\n> If you are new to Nextflow and nf-core, please refer to [this page](https://nf-co.re/docs/usage/installation) on how to set-up Nextflow. Make sure to [test your setup](https://nf-co.re/docs/usage/introduction#how-to-run-a-pipeline) with `-profile test -stub-run` before running the workflow on actual data. At this early development stage, `-profile test`'s bundled fixture is deliberately tiny and does not carry real HLA allele signal, so it is only validated in `-stub-run` mode (a process/channel wiring smoke test); a real, non-stub `-profile test` run is not expected to succeed yet.\n\nProvide an RNA samplesheet with the exact columns `rna_id,bam,bai,unpaired_r1,unpaired_r2`. The requested HLA region is passed to samtools unchanged, so its chromosome notation must match the BAM headers.\n\n```bash\nnextflow run wtsi-hgi/hlarnaseq \\\n   --rna_samples rna_samples.csv \\\n   --hla_region chr6:28500000-33400000 \\\n   --outdir <OUTDIR>\n```\n\n> [!WARNING]\n> Please provide pipeline parameters via the CLI or Nextflow `-params-file` option.\n> Custom config files including those provided by the `-c` Nextflow option\n> can be used to provide any configuration _**except for parameters**_;\n> see [docs](https://nf-co.re/docs/usage/getting_started/configuration#custom-configuration-files).\n\nThe genotype-side HLA calls are optional and come from one of two sources. Use `--wgs_samples` to type them from WGS with HLA-LA, or `--array_samples` together with `--hibag_model` to impute them from SNP-array (PLINK) data with HIBAG:\n\n```bash\nnextflow run wtsi-hgi/hlarnaseq \\\n   --rna_samples rna_samples.csv \\\n   --hla_region chr6:28500000-33400000 \\\n   --array_samples array_samples.csv \\\n   --hibag_model /path/to/HIBAG_model.RData \\\n   --sample_key rna_wgs_key.csv \\\n   --outdir <OUTDIR>\n```\n\nBoth produce the same combined allele table, so the consensus step and everything after it are unchanged either way. See the [usage documentation](docs/usage.md#snp-array-samplesheet-input-hibag) for the SNP-array samplesheet layout and the HIBAG model requirements.\n\nFor more details and further functionality, please refer to the [usage documentation](https://nf-co.re/hlarnaseq/usage)\nand the [parameter documentation](https://nf-co.re/hlarnaseq/parameters).\n\n## Pipeline output\n\nTo see the results of an example test run with a full size dataset refer to the [results](https://nf-co.re/hlarnaseq/results) tab on the nf-core website pipeline page.\nFor more details about the output files and reports, please refer to the\n[output documentation](https://nf-co.re/hlarnaseq/output).\n\n## Credits\n\nnf-core/hlarnaseq pipeline was written by Gennadii Zakharov,\nfollowing the approach developed by\n[Davenport Group](https://www.sanger.ac.uk/group/davenport-group/),\n[Wellcome Sanger Institute](https://www.sanger.ac.uk).\n\n<!--\nWe thank the following people for their extensive assistance in the development of this pipeline:\n\n TODO nf-core: If applicable, make list of people who have also contributed -->\n\n## Contributions and Support\n\nIf you would like to contribute to this pipeline, please see the [contributing guidelines](.github/CONTRIBUTING.md).\n\n<!--\nFor further information or help, don't hesitate to get in touch on the [Slack `#hlarnaseq` channel](https://nfcore.slack.com/channels/hlarnaseq)\n(you can join with [this invite](https://nf-co.re/join/slack)).\n-->\n\n## Citations\n\n<!-- TODO nf-core: Add citation for pipeline after first release. Uncomment lines below and update Zenodo doi and badge at the top of this file. -->\n<!-- If you use nf-core/hlarnaseq for your analysis, please cite it using the following doi: [10.5281/zenodo.XXXXXX](https://doi.org/10.5281/zenodo.XXXXXX) -->\n\n<!-- TODO nf-core: Add bibliography of tools and data used in your pipeline -->\n\nAn extensive list of references for the tools used by the pipeline can be found in the [`CITATIONS.md`](CITATIONS.md) file.\n\nThis pipeline uses code and infrastructure developed and maintained by the [nf-core](https://nf-co.re) initative, and reused here under the [MIT license](https://github.com/nf-core/tools/blob/master/LICENSE).\n\n> The nf-core framework for community-curated bioinformatics pipelines.\n>\n> Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.\n>\n> Nat Biotechnol. 2020 Feb 13. doi: 10.1038/s41587-020-0439-x.\n\n[![Nextflow](https://img.shields.io/badge/version-%E2%89%A525.04.0-green?style=flat&logo=nextflow&logoColor=white&color=%230DC09D&link=https%3A%2F%2Fnextflow.io)](https://www.nextflow.io/)\n[![nf-core template version](https://img.shields.io/badge/nf--core_template-3.5.2-green?style=flat&logo=nfcore&logoColor=white&color=%2324B064&link=https%3A%2F%2Fnf-co.re)](https://github.com/nf-core/tools/releases/tag/3.5.2)\n\n<!--\nIn addition, references of tools and data used in this pipeline are as follows:\n-->\n",
+            "datePublished": "2026-09-22T11:15:26+00:00",
+            "description": "<h1>\n  HLARNASeq\n</h1>\n\n<!-- Commented due to the early stage of development\n[![run with conda](http://img.shields.io/badge/run%20with-conda-3EB049?labelColor=000000&logo=anaconda)](https://docs.conda.io/en/latest/)\n[![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)\n[![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)\n-->\n\n## Introduction\n\n**HLARNASeq** is a bioinformatics pipeline that\nprecisely qualifies human HLA genes expression from RNASeq data\nby using personalized reference genomes.\n\nThe pipeline can use results of [NF-Core RNASeq](https://nf-co.re/rnaseq/latest) pipeline as input.\n\n### Pipeline scheme\n\n<!-- TODO nf-core: Include a figure that guides the user through the major workflow steps. Many nf-core\n     workflows use the \"tube map\" design for that. See https://nf-co.re/docs/guidelines/graphic_design/workflow_diagrams#examples for examples.   -->\n\n- Check up front that `--gtf`'s HLA-region annotation has a one-to-one `gene_name` <-> `gene_id` mapping, and stop immediately if it does not (stock GENCODE is rejected - see [usage docs](docs/usage.md#gtf-hla-gene-id-uniqueness-check))\n- Extract MHC region and unmapped reads from RNASeq data\n- Validate the extracted paired FASTQ files before arcasHLA analysis\n- Call HLA reference alleles from RNASeq data with arcasHLA\n- (Optional) Call HLA reference alleles from WGS/WES data with HLA-LA, **or** impute them from SNP-array data with HIBAG (the two are mutually exclusive)\n- Call HLA allele consensus on RNASeq and WGS/WES data\n- Map RNASeq data to personalized references\n- Extract HLA genes counts\n- Hijack original count matrix\n\n## Usage\n\n> [!NOTE]\n> If you are new to Nextflow and nf-core, please refer to [this page](https://nf-co.re/docs/usage/installation) on how to set-up Nextflow. Make sure to [test your setup](https://nf-co.re/docs/usage/introduction#how-to-run-a-pipeline) with `-profile test -stub-run` before running the workflow on actual data. At this early development stage, `-profile test`'s bundled fixture is deliberately tiny and does not carry real HLA allele signal, so it is only validated in `-stub-run` mode (a process/channel wiring smoke test); a real, non-stub `-profile test` run is not expected to succeed yet.\n\nProvide an RNA samplesheet with the exact columns `rna_id,bam,bai,unpaired_r1,unpaired_r2`. The requested HLA region is passed to samtools unchanged, so its chromosome notation must match the BAM headers.\n\nRNA-seq HLA quantification is what the pipeline does, so `--rna_samples`, `--sample_key`, `--hla_region`, `--gtf` and `--arcashla_reference_dir` are all required; a run that omits any of them stops immediately at parameter validation. A `--sample_key` with a header only is valid and routes every RNA sample through the `RNA_ONLY:<rna_id>` consensus fallback.\n\n```bash\nnextflow run wtsi-hgi/hlarnaseq \\\n   -profile singularity \\\n   --rna_samples rna_samples.csv \\\n   --sample_key rna_wgs_key.csv \\\n   --hla_region chr6:28500000-33400000 \\\n   --gtf /path/to/annotation.gtf \\\n   --arcashla_reference_dir /path/to/arcashla_reference \\\n   --outdir <OUTDIR>\n```\n\n> [!IMPORTANT]\n> A profile is required. Every tool this pipeline runs is declared by the process that runs it \u2014 an `environment.yml` feeding a `conda` directive, paired with a matching pinned `container` \u2014 so nothing is taken from the environment you launch Nextflow in. Use `-profile singularity`, `docker`, `apptainer` or `conda`; with none of them, every step fails fast saying so.\n>\n> Most images are public and pulled for you, but **four are currently built locally** and need `scripts/build_image_{arcashla,hlapm,hlapm_quantify,datatools}.sh` run once before your first containerized run. See [Dependencies and profiles](docs/usage.md#dependencies-and-profiles).\n\n> [!WARNING]\n> Please provide pipeline parameters via the CLI or Nextflow `-params-file` option.\n> Custom config files including those provided by the `-c` Nextflow option\n> can be used to provide any configuration _**except for parameters**_;\n> see [docs](https://nf-co.re/docs/usage/getting_started/configuration#custom-configuration-files).\n\nThe genotype-side HLA calls are optional and come from one of two sources. Use `--wgs_samples` to type them from WGS with HLA-LA, or `--array_samples` together with `--hibag_model` to impute them from SNP-array (PLINK) data with HIBAG:\n\n```bash\nnextflow run wtsi-hgi/hlarnaseq \\\n   -profile singularity \\\n   --rna_samples rna_samples.csv \\\n   --sample_key rna_wgs_key.csv \\\n   --hla_region chr6:28500000-33400000 \\\n   --gtf /path/to/annotation.gtf \\\n   --arcashla_reference_dir /path/to/arcashla_reference \\\n   --array_samples array_samples.csv \\\n   --hibag_model /path/to/HIBAG_model.RData \\\n   --outdir <OUTDIR>\n```\n\nBoth produce the same combined allele table, so the consensus step and everything after it are unchanged either way. See the [usage documentation](docs/usage.md#snp-array-samplesheet-input-hibag) for the SNP-array samplesheet layout and the HIBAG model requirements.\n\nFor more details and further functionality, please refer to the [usage documentation](docs/usage.md).\nThe full parameter list is available from the pipeline itself with\n`nextflow run wtsi-hgi/hlarnaseq --help_full`, and is defined in\n[`nextflow_schema.json`](nextflow_schema.json).\n\n## Pipeline output\n\nFor details about the output files and reports, please refer to the\n[output documentation](docs/output.md).\n\n## Credits\n\nwtsi-hgi/hlarnaseq pipeline was written by Gennadii Zakharov,\nfollowing the approach developed by\n[Davenport Group](https://www.sanger.ac.uk/group/davenport-group/),\n[Wellcome Sanger Institute](https://www.sanger.ac.uk).\n\n<!--\nWe thank the following people for their extensive assistance in the development of this pipeline:\n\n TODO nf-core: If applicable, make list of people who have also contributed -->\n\n## Contributions and Support\n\nIf you would like to contribute to this pipeline, please see the [contributing guidelines](.github/CONTRIBUTING.md).\n\nFor further information or help, please open an issue on\n[GitHub](https://github.com/wtsi-hgi/hlarnaseq/issues) or get in touch with\nGennadii Zakharov <gz3@sanger.ac.uk>.\n\nThis pipeline is built from the nf-core template but is **not** an official nf-core\npipeline, so please do not raise questions about it in the nf-core community channels.\n\n## Citations\n\n<!-- TODO nf-core: Add citation for pipeline after first release. Uncomment lines below and update Zenodo doi and badge at the top of this file. -->\n<!-- If you use wtsi-hgi/hlarnaseq for your analysis, please cite it using the following doi: [10.5281/zenodo.XXXXXX](https://doi.org/10.5281/zenodo.XXXXXX) -->\n\n<!-- TODO nf-core: Add bibliography of tools and data used in your pipeline -->\n\nAn extensive list of references for the tools used by the pipeline can be found in the [`CITATIONS.md`](CITATIONS.md) file.\n\nThis pipeline uses code and infrastructure developed and maintained by the [nf-core](https://nf-co.re) initative, and reused here under the [MIT license](https://github.com/nf-core/tools/blob/master/LICENSE).\n\n> The nf-core framework for community-curated bioinformatics pipelines.\n>\n> Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.\n>\n> Nat Biotechnol. 2020 Feb 13. doi: 10.1038/s41587-020-0439-x.\n\n[![Nextflow](https://img.shields.io/badge/version-%E2%89%A525.04.0-green?style=flat&logo=nextflow&logoColor=white&color=%230DC09D&link=https%3A%2F%2Fnextflow.io)](https://www.nextflow.io/)\n[![nf-core template version](https://img.shields.io/badge/nf--core_template-3.5.2-green?style=flat&logo=nfcore&logoColor=white&color=%2324B064&link=https%3A%2F%2Fnf-co.re)](https://github.com/nf-core/tools/releases/tag/3.5.2)\n\n<!--\nIn addition, references of tools and data used in this pipeline are as follows:\n-->\n",
             "hasPart": [
                 {
                     "@id": "main.nf"
                 },
                 {
                     "@id": "assets/"
+                },
+                {
+                    "@id": "bin/"
                 },
                 {
                     "@id": "conf/"
@@ -39,6 +42,15 @@
                 },
                 {
                     "@id": "docs/images/"
+                },
+                {
+                    "@id": "modules/"
+                },
+                {
+                    "@id": "modules/local/"
+                },
+                {
+                    "@id": "modules/nf-core/"
                 },
                 {
                     "@id": "workflows/"
@@ -86,17 +98,17 @@
                     "@id": ".prettierignore"
                 }
             ],
-            "isBasedOn": "https://github.com/nf-core/hlarnaseq",
+            "isBasedOn": "https://github.com/wtsi-hgi/hlarnaseq",
             "license": "MIT",
             "mainEntity": {
                 "@id": "main.nf"
             },
             "mentions": [
                 {
-                    "@id": "#d9f25621-33f3-4d2a-99f5-5288e80e5f54"
+                    "@id": "#075e839d-bb44-4167-94c2-6603d3422949"
                 }
             ],
-            "name": "nf-core/hlarnaseq"
+            "name": "wtsi-hgi/hlarnaseq"
         },
         {
             "@id": "ro-crate-metadata.json",
@@ -106,7 +118,7 @@
             },
             "conformsTo": [
                 {
-                    "@id": "https://w3id.org/ro/crate/1.1"
+                    "@id": "https://w3id.org/ro/crate/1.2"
                 },
                 {
                     "@id": "https://w3id.org/workflowhub/workflow-ro-crate/1.0"
@@ -120,8 +132,13 @@
                 "SoftwareSourceCode",
                 "ComputationalWorkflow"
             ],
+            "author": [
+                {
+                    "@id": "https://orcid.org/0000-0003-4850-3777"
+                }
+            ],
             "dateCreated": "",
-            "dateModified": "2026-03-20T13:31:23Z",
+            "dateModified": "2026-09-22T11:15:26Z",
             "dct:conformsTo": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE/",
             "keywords": [
                 "nf-core",
@@ -131,7 +148,7 @@
                 "MIT"
             ],
             "name": [
-                "nf-core/hlarnaseq"
+                "wtsi-hgi/hlarnaseq"
             ],
             "programmingLanguage": {
                 "@id": "https://w3id.org/workflowhub/workflow-ro-crate#nextflow"
@@ -139,10 +156,7 @@
             "sdPublisher": {
                 "@id": "https://nf-co.re/"
             },
-            "url": [
-                "https://github.com/nf-core/hlarnaseq",
-                "https://nf-co.re/hlarnaseq/dev/"
-            ],
+            "url": "https://github.com/wtsi-hgi/hlarnaseq",
             "version": [
                 "1.0.0dev"
             ]
@@ -160,23 +174,23 @@
             "version": "!>=25.04.0"
         },
         {
-            "@id": "#d9f25621-33f3-4d2a-99f5-5288e80e5f54",
+            "@id": "#075e839d-bb44-4167-94c2-6603d3422949",
             "@type": "TestSuite",
             "instance": [
                 {
-                    "@id": "#98b971e8-0ed3-4384-b94e-5ae335d525b1"
+                    "@id": "#6b0183e5-75a1-4cc7-b640-c36f6e01fc3f"
                 }
             ],
             "mainEntity": {
                 "@id": "main.nf"
             },
-            "name": "Test suite for nf-core/hlarnaseq"
+            "name": "Test suite for wtsi-hgi/hlarnaseq"
         },
         {
-            "@id": "#98b971e8-0ed3-4384-b94e-5ae335d525b1",
+            "@id": "#6b0183e5-75a1-4cc7-b640-c36f6e01fc3f",
             "@type": "TestInstance",
-            "name": "GitHub Actions workflow for testing nf-core/hlarnaseq",
-            "resource": "repos/nf-core/hlarnaseq/actions/workflows/nf-test.yml",
+            "name": "GitHub Actions workflow for testing wtsi-hgi/hlarnaseq",
+            "resource": "repos/wtsi-hgi/hlarnaseq/actions/workflows/nf-test.yml",
             "runsOn": {
                 "@id": "https://w3id.org/ro/terms/test#GithubService"
             },
@@ -196,6 +210,11 @@
             "description": "Additional files"
         },
         {
+            "@id": "bin/",
+            "@type": "Dataset",
+            "description": "Scripts that must be callable from a pipeline process"
+        },
+        {
             "@id": "conf/",
             "@type": "Dataset",
             "description": "Configuration files"
@@ -209,6 +228,21 @@
             "@id": "docs/images/",
             "@type": "Dataset",
             "description": "Images for the documentation files"
+        },
+        {
+            "@id": "modules/",
+            "@type": "Dataset",
+            "description": "Modules used by the pipeline"
+        },
+        {
+            "@id": "modules/local/",
+            "@type": "Dataset",
+            "description": "Pipeline-specific modules"
+        },
+        {
+            "@id": "modules/nf-core/",
+            "@type": "Dataset",
+            "description": "nf-core modules"
         },
         {
             "@id": "workflows/",
@@ -290,6 +324,12 @@
             "@type": "Organization",
             "name": "nf-core",
             "url": "https://nf-co.re/"
+        },
+        {
+            "@id": "https://orcid.org/0000-0003-4850-3777",
+            "@type": "Person",
+            "email": "gz3@sanger.ac.uk",
+            "name": "Gennadii Zakharov"
         }
     ]
 }

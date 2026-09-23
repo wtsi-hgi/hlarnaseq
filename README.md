@@ -79,18 +79,19 @@ nextflow run wtsi-hgi/hlarnaseq \
 
 Both produce the same combined allele table, so the consensus step and everything after it are unchanged either way. See the [usage documentation](docs/usage.md#snp-array-samplesheet-input-hibag) for the SNP-array samplesheet layout and the HIBAG model requirements.
 
-For more details and further functionality, please refer to the [usage documentation](https://nf-co.re/hlarnaseq/usage)
-and the [parameter documentation](https://nf-co.re/hlarnaseq/parameters).
+For more details and further functionality, please refer to the [usage documentation](docs/usage.md).
+The full parameter list is available from the pipeline itself with
+`nextflow run wtsi-hgi/hlarnaseq --help_full`, and is defined in
+[`nextflow_schema.json`](nextflow_schema.json).
 
 ## Pipeline output
 
-To see the results of an example test run with a full size dataset refer to the [results](https://nf-co.re/hlarnaseq/results) tab on the nf-core website pipeline page.
-For more details about the output files and reports, please refer to the
-[output documentation](https://nf-co.re/hlarnaseq/output).
+For details about the output files and reports, please refer to the
+[output documentation](docs/output.md).
 
 ## Credits
 
-nf-core/hlarnaseq pipeline was written by Gennadii Zakharov,
+wtsi-hgi/hlarnaseq pipeline was written by Gennadii Zakharov,
 following the approach developed by
 [Davenport Group](https://www.sanger.ac.uk/group/davenport-group/),
 [Wellcome Sanger Institute](https://www.sanger.ac.uk).
@@ -104,15 +105,17 @@ We thank the following people for their extensive assistance in the development 
 
 If you would like to contribute to this pipeline, please see the [contributing guidelines](.github/CONTRIBUTING.md).
 
-<!--
-For further information or help, don't hesitate to get in touch on the [Slack `#hlarnaseq` channel](https://nfcore.slack.com/channels/hlarnaseq)
-(you can join with [this invite](https://nf-co.re/join/slack)).
--->
+For further information or help, please open an issue on
+[GitHub](https://github.com/wtsi-hgi/hlarnaseq/issues) or get in touch with
+Gennadii Zakharov <gz3@sanger.ac.uk>.
+
+This pipeline is built from the nf-core template but is **not** an official nf-core
+pipeline, so please do not raise questions about it in the nf-core community channels.
 
 ## Citations
 
 <!-- TODO nf-core: Add citation for pipeline after first release. Uncomment lines below and update Zenodo doi and badge at the top of this file. -->
-<!-- If you use nf-core/hlarnaseq for your analysis, please cite it using the following doi: [10.5281/zenodo.XXXXXX](https://doi.org/10.5281/zenodo.XXXXXX) -->
+<!-- If you use wtsi-hgi/hlarnaseq for your analysis, please cite it using the following doi: [10.5281/zenodo.XXXXXX](https://doi.org/10.5281/zenodo.XXXXXX) -->
 
 <!-- TODO nf-core: Add bibliography of tools and data used in your pipeline -->
 

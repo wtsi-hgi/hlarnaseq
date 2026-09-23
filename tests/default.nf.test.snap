@@ -81,7 +81,7 @@
                     "subread": null
                 },
                 "Workflow": {
-                    "nf-core/hlarnaseq": "v1.0.0dev"
+                    "wtsi-hgi/hlarnaseq": "v1.0.0dev"
                 }
             },
             [
@@ -176,7 +176,7 @@
                 "hlapm/star_index_targets/sample_alleles.csv",
                 "hlapm/star_index_targets/unique_alleles.csv",
                 "pipeline_info",
-                "pipeline_info/nf_core_hlarnaseq_software_versions.yml"
+                "pipeline_info/wtsihgi_hlarnaseq_software_versions.yml"
             ],
             [
                 "RNA_SAMPLE_1.mhc.namesort.bam:md5,82516f3cf3010c60cb7faeb5adb9ec22",

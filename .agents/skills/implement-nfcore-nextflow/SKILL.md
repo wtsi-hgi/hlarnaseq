@@ -1,6 +1,6 @@
 ---
 name: implement-nfcore-nextflow
-description: Implement an approved one-iteration plan for nf-core/hlarnaseq using Nextflow DSL2, Python, or R as appropriate. Preserves nf-core conventions, updates coordinated schema/docs/tests, and writes artifacts/2_implement.md.
+description: Implement an approved one-iteration plan for hlarnaseq using Nextflow DSL2, Python, or R as appropriate. Preserves nf-core conventions, updates coordinated schema/docs/tests, and writes artifacts/2_implement.md.
 ---
 
 # Implement nf-core Nextflow Skill

@@ -1,6 +1,6 @@
 ---
 name: validate-hlarnaseq
-description: Validate nf-core/hlarnaseq changes by running available nf-core, nf-test, and pre-commit checks; review plan compliance; and write artifacts/3_validate.md with findings and residual risks.
+description: Validate hlarnaseq changes by running available nf-core, nf-test, and pre-commit checks; review plan compliance; and write artifacts/3_validate.md with findings and residual risks.
 ---
 
 # Validate HLARNASeq Skill

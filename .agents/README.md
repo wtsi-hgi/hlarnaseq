@@ -1,6 +1,6 @@
 # Agent Workflow
 
-This directory contains local Codex skills for developing `nf-core/hlarnaseq`.
+This directory contains local Codex skills for developing `wtsi-hgi/hlarnaseq`.
 
 The workflow is intentionally human-in-the-loop:
 

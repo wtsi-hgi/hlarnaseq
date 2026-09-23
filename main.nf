@@ -1,11 +1,11 @@
 #!/usr/bin/env nextflow
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    nf-core/hlarnaseq
+    wtsi-hgi/hlarnaseq
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Github : https://github.com/nf-core/hlarnaseq
-    Website: https://nf-co.re/hlarnaseq
-    Slack  : https://nfcore.slack.com/channels/hlarnaseq
+    Github : https://github.com/wtsi-hgi/hlarnaseq
+    Docs   : docs/usage.md and docs/output.md
+    Contact: Gennadii Zakharov <gz3@sanger.ac.uk>
 ----------------------------------------------------------------------------------------
 */
 
@@ -16,9 +16,9 @@
 */
 
 include { HLARNASEQ  } from './workflows/hlarnaseq'
-include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_nfcore_hlarnaseq_pipeline'
-include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_nfcore_hlarnaseq_pipeline'
-include { getGenomeAttribute      } from './subworkflows/local/utils_nfcore_hlarnaseq_pipeline'
+include { PIPELINE_INITIALISATION } from './subworkflows/local/utils_wtsihgi_hlarnaseq_pipeline'
+include { PIPELINE_COMPLETION     } from './subworkflows/local/utils_wtsihgi_hlarnaseq_pipeline'
+include { getGenomeAttribute      } from './subworkflows/local/utils_wtsihgi_hlarnaseq_pipeline'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -40,7 +40,7 @@ params.fasta = getGenomeAttribute('fasta')
 //
 // WORKFLOW: Run main analysis pipeline depending on type of input
 //
-workflow NFCORE_HLARNASEQ {
+workflow WTSIHGI_HLARNASEQ {
 
     take:
     rna_samplesheet   // channel: RNA samplesheet read in from --rna_samples
@@ -90,7 +90,7 @@ workflow {
     //
     // WORKFLOW: Run main workflow
     //
-    NFCORE_HLARNASEQ (
+    WTSIHGI_HLARNASEQ (
         PIPELINE_INITIALISATION.out.rna_samplesheet,
         PIPELINE_INITIALISATION.out.wgs_samplesheet,
         PIPELINE_INITIALISATION.out.array_samplesheet,

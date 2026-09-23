@@ -1,4 +1,4 @@
-# nf-core/hlarnaseq: HLAPM_QUANTIFY_READS container image.
+# wtsi-hgi/hlarnaseq: HLAPM_QUANTIFY_READS container image.
 #
 # Installs the pinned Python 2.7 stack declared in this module's
 # environment.yml - nothing else. See that file for why Python 2.7.15, why

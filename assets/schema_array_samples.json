@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://raw.githubusercontent.com/nf-core/hlarnaseq/master/assets/schema_array_samples.json",
-    "title": "nf-core/hlarnaseq pipeline - params.array_samples schema",
+    "$id": "https://raw.githubusercontent.com/wtsi-hgi/hlarnaseq/main/assets/schema_array_samples.json",
+    "title": "wtsi-hgi/hlarnaseq pipeline - params.array_samples schema",
     "description": "Schema for the SNP-array samples manifest provided with params.array_samples. Each row is one PLINK dataset, not one sample: a PLINK fileset may hold many samples and HIBAG predicts all of them at once. The sample IDs that reach the consensus step come from the .fam IID column, not from array_sample_id.",
     "type": "array",
     "items": {

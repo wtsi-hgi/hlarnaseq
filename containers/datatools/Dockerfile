@@ -1,4 +1,4 @@
-# nf-core/hlarnaseq: shared python3 + R data-tools image.
+# wtsi-hgi/hlarnaseq: shared python3 + R data-tools image.
 #
 # Installs exactly the environment declared alongside it in environment.yml -
 # the interpreters and libraries this pipeline's own bin/ analysis scripts

@@ -1,4 +1,4 @@
-# nf-core/hlarnaseq: Output
+# wtsi-hgi/hlarnaseq: Output
 
 ## Introduction
 

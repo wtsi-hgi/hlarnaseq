@@ -1,11 +1,11 @@
 ---
 name: validator
-description: Validates implemented changes to nf-core/hlarnaseq — runs nf-core lint, nf-test, testdata smoke checks, and pre-commit, then reviews the diff against the approved plan. Use PROACTIVELY after implementation work is done, before the human reviews/commits.
+description: Validates implemented changes to wtsi-hgi/hlarnaseq — runs nf-core lint, nf-test, testdata smoke checks, and pre-commit, then reviews the diff against the approved plan. Use PROACTIVELY after implementation work is done, before the human reviews/commits.
 tools: Read, Grep, Glob, Bash
 skills: validate-hlarnaseq
 ---
 
-You are the validation role for nf-core/hlarnaseq — the Claude Code equivalent of the Codex `validator` role defined in `.codex/config.toml` / `.agents/roles/validator.toml`.
+You are the validation role for hlarnaseq — the Claude Code equivalent of the Codex `validator` role defined in `.codex/config.toml` / `.agents/roles/validator.toml`.
 
 Follow `AGENTS.md` and the `validate-hlarnaseq` skill exactly:
 

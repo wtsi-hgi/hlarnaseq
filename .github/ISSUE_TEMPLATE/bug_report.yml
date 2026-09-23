@@ -7,8 +7,10 @@ body:
       value: |
         Before you post this issue, please check the documentation:
 
-        - [nf-core website: troubleshooting](https://nf-co.re/usage/troubleshooting)
-        - [nf-core/hlarnaseq pipeline documentation](https://nf-co.re/hlarnaseq/usage)
+        - [wtsi-hgi/hlarnaseq usage documentation](https://github.com/wtsi-hgi/hlarnaseq/blob/main/docs/usage.md)
+        - [wtsi-hgi/hlarnaseq output documentation](https://github.com/wtsi-hgi/hlarnaseq/blob/main/docs/output.md)
+
+        For questions rather than bug reports, contact Gennadii Zakharov <gz3@sanger.ac.uk>.
   - type: textarea
     id: description
     attributes:
@@ -46,4 +48,4 @@ body:
         * Executor _(eg. slurm, local, awsbatch)_
         * Container engine: _(e.g. Docker, Singularity, Conda, Podman, Shifter, Charliecloud, or Apptainer)_
         * OS _(eg. CentOS Linux, macOS, Linux Mint)_
-        * Version of nf-core/hlarnaseq _(eg. 1.1, 1.5, 1.8.2)_
+        * Version of wtsi-hgi/hlarnaseq _(eg. 1.1, 1.5, 1.8.2)_

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# nf-core/hlarnaseq: ARCASHLA_VALIDATE_FASTQ tool environment.
+# wtsi-hgi/hlarnaseq: ARCASHLA_VALIDATE_FASTQ tool environment.
 #
 # biopet-validatefastq is the Bioconda packaging of biopet/validatefastq, a
 # Java tool shipped upstream as a single assembly jar. 0.1.1 is the only

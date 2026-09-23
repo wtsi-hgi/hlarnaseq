@@ -446,7 +446,7 @@ fi
 #
 #    Building it once here removes the race outright, and is why
 #    hlalaGraphDirExistsError() in
-#    subworkflows/local/utils_nfcore_hlarnaseq_pipeline/main.nf now refuses to
+#    subworkflows/local/utils_wtsihgi_hlarnaseq_pipeline/main.nf now refuses to
 #    start a --wgs_samples run against a graph that lacks it.
 #
 #    `bwa index` takes no thread or memory options - there is nothing to size

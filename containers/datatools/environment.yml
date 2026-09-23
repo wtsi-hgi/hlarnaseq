@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# nf-core/hlarnaseq: shared python3 + R data-tools environment.
+# wtsi-hgi/hlarnaseq: shared python3 + R data-tools environment.
 #
 # Unlike every other environment.yml in this repository, this one is NOT
 # module-local: it is shared by the twelve modules that run this pipeline's own

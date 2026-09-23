@@ -1,11 +1,11 @@
 ---
 name: plan-pipeline-change
-description: Create a small, reviewable one-iteration plan for nf-core/hlarnaseq. Use for features, fixes, refactors, module additions, parameter changes, docs updates, or test work. Saves artifacts/1_plan.md and stops for human approval.
+description: Create a small, reviewable one-iteration plan for hlarnaseq. Use for features, fixes, refactors, module additions, parameter changes, docs updates, or test work. Saves artifacts/1_plan.md and stops for human approval.
 ---
 
 # Plan Pipeline Change Skill
 
-Use this skill when the user asks to plan any change to `nf-core/hlarnaseq`, or when implementation is requested but no approved plan exists. This is the default for any pipeline change request, whether or not the user says the word "plan".
+Use this skill when the user asks to plan any change to `hlarnaseq`, or when implementation is requested but no approved plan exists. This is the default for any pipeline change request, whether or not the user says the word "plan".
 
 Skip this skill only when the user explicitly asks to bypass the plan/approval step for this change (e.g. "make this change directly", "skip the plan", "no plan needed"). In that case go straight to `implement-nfcore-nextflow`, but still keep the change small, still validate afterward, still don't commit, and say plainly that the plan step was skipped because the human asked for a direct change. See `AGENTS.md` § "Bypassing the plan/approve cycle" for the exact bar for what counts as explicit.
 

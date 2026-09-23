@@ -5,7 +5,7 @@ This file is the single source of truth for how agents must work in this reposit
 ## Project Overview
 
 You are helping develop
-**nf-core/hlarnaseq** -- a bioinformatics pipeline that
+**wtsi-hgi/hlarnaseq** -- a bioinformatics pipeline that
 precisely quantifies human HLA gene expression from RNA-seq data
 by using personalized reference genomes.
 

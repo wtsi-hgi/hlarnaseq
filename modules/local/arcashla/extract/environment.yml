@@ -1,6 +1,6 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# nf-core/hlarnaseq: ARCASHLA_EXTRACT tool environment.
+# wtsi-hgi/hlarnaseq: ARCASHLA_EXTRACT tool environment.
 #
 # This module slices the MHC region out of each RNA sample's BAM with
 # `samtools view --fetch-pairs | samtools sort -n | samtools fastq`. Until now

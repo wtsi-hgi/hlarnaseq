@@ -107,7 +107,7 @@ nextflow_pipeline {
                 { assert new File("$outputDir/combine_final_counts/RNA_SAMPLE_1/RNA_SAMPLE_1.final_counts.change_log.tsv").text.contains('gene_id\tgene_name\tcategory\toriginal_count\tnew_count\taction') },
                 { assert snapshot(
                     // pipeline versions.yml file for multiqc from which Nextflow version is removed because we test pipelines on multiple Nextflow versions
-                    removeNextflowVersion("$outputDir/pipeline_info/nf_core_hlarnaseq_software_versions.yml"),
+                    removeNextflowVersion("$outputDir/pipeline_info/wtsihgi_hlarnaseq_software_versions.yml"),
                     // All stable path name, with a relative path
                     stable_name,
                     // All files with stable contents

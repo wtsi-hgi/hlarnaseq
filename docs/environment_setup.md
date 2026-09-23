@@ -1,4 +1,4 @@
-# nf-core/hlarnaseq: environments and containers
+# wtsi-hgi/hlarnaseq: environments and containers
 
 **Every tool this pipeline runs is declared by the process that runs it** — an
 `environment.yml` feeding that module's `conda` directive, paired with a matching

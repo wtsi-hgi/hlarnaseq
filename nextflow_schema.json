@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://raw.githubusercontent.com/nf-core/hlarnaseq/master/nextflow_schema.json",
-    "title": "nf-core/hlarnaseq pipeline parameters",
+    "$id": "https://raw.githubusercontent.com/wtsi-hgi/hlarnaseq/main/nextflow_schema.json",
+    "title": "wtsi-hgi/hlarnaseq pipeline parameters",
     "description": "Precise analysis of human HLA RNASeq data by usign personalized references",
     "type": "object",
     "$defs": {
@@ -20,7 +20,7 @@
                     "mimetype": "text/csv",
                     "pattern": "^\\S+\\.csv$",
                     "description": "Path to the RNA samplesheet containing indexed BAMs and paired unaligned reads.",
-                    "help_text": "Required top-level input: RNA-seq HLA quantification is what this pipeline does, so every stage runs off it. CSV file with the exact columns rna_id,bam,bai,unpaired_r1,unpaired_r2. See [usage docs](https://nf-co.re/hlarnaseq/usage#rna-samplesheet-input).",
+                    "help_text": "Required top-level input: RNA-seq HLA quantification is what this pipeline does, so every stage runs off it. CSV file with the exact columns rna_id,bam,bai,unpaired_r1,unpaired_r2. See [usage docs](docs/usage.md#rna-samplesheet-input).",
                     "fa_icon": "fas fa-file-csv"
                 },
                 "hla_region": {
@@ -39,7 +39,7 @@
                     "mimetype": "text/csv",
                     "pattern": "^\\S+\\.csv$",
                     "description": "Path to comma-separated file containing WGS BAM and BAI files.",
-                    "help_text": "Optional WGS samplesheet with the exact columns WGS_sample_id,WGS_BAM_path,WGS_BAI_path. All entries are mandatory. See [usage docs](https://nf-co.re/hlarnaseq/usage#wgs-samplesheet-input).",
+                    "help_text": "Optional WGS samplesheet with the exact columns WGS_sample_id,WGS_BAM_path,WGS_BAI_path. All entries are mandatory. See [usage docs](docs/usage.md#wgs-samplesheet-input).",
                     "fa_icon": "fas fa-file-csv"
                 },
                 "array_samples": {
@@ -61,7 +61,7 @@
                     "mimetype": "text/csv",
                     "pattern": "^\\S+\\.csv$",
                     "description": "Path to comma-separated file mapping RNA samples to their matched WGS sample.",
-                    "help_text": "Required top-level input, with the exact columns rnaseq_sample_id,wgs_sample_id. One row per RNA sample with a matched WGS sample; RNA samples absent from this file (or when the file has zero data rows) are routed through the existing `RNA_ONLY:<rna_id>` consensus fallback path instead of being paired to a WGS sample. See [usage docs](https://nf-co.re/hlarnaseq/usage#rna-wgs-sample-key-input).",
+                    "help_text": "Required top-level input, with the exact columns rnaseq_sample_id,wgs_sample_id. One row per RNA sample with a matched WGS sample; RNA samples absent from this file (or when the file has zero data rows) are routed through the existing `RNA_ONLY:<rna_id>` consensus fallback path instead of being paired to a WGS sample. See [usage docs](docs/usage.md#rnawgs-sample-key-input).",
                     "fa_icon": "fas fa-file-csv"
                 },
                 "rna_excluded_samples": {

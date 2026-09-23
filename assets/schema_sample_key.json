@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://raw.githubusercontent.com/nf-core/hlarnaseq/master/assets/schema_sample_key.json",
-    "title": "nf-core/hlarnaseq pipeline - params.sample_key schema",
+    "$id": "https://raw.githubusercontent.com/wtsi-hgi/hlarnaseq/main/assets/schema_sample_key.json",
+    "title": "wtsi-hgi/hlarnaseq pipeline - params.sample_key schema",
     "description": "Schema for the RNA/WGS sample key manifest provided with params.sample_key",
     "type": "array",
     "items": {

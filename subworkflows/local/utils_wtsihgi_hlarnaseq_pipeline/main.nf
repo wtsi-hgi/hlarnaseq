@@ -1,5 +1,5 @@
 //
-// Subworkflow with functionality specific to the nf-core/hlarnaseq pipeline
+// Subworkflow with functionality specific to the wtsi-hgi/hlarnaseq pipeline
 //
 
 /*
@@ -64,7 +64,7 @@ workflow PIPELINE_INITIALISATION {
 \033[0;34m  |\\ | |__  __ /  ` /  \\ |__) |__         \033[0;33m}  {\033[0m
 \033[0;34m  | \\| |       \\__, \\__/ |  \\ |___     \033[0;32m\\`-._,-`-,\033[0m
                                         \033[0;32m`._,._,\'\033[0m
-\033[0;35m  nf-core/hlarnaseq ${workflow.manifest.version}\033[0m
+\033[0;35m  wtsi-hgi/hlarnaseq ${workflow.manifest.version}\033[0m
 -\033[2m----------------------------------------------------\033[0m-
 """
     after_text = """${workflow.manifest.doi ? "\n* The pipeline\n" : ""}${workflow.manifest.doi.tokenize(",").collect { doi -> "    https://doi.org/${doi.trim().replace('https://doi.org/','')}"}.join("\n")}${workflow.manifest.doi ? "\n" : ""}
@@ -72,7 +72,7 @@ workflow PIPELINE_INITIALISATION {
     https://doi.org/10.1038/s41587-020-0439-x
 
 * Software dependencies
-    https://github.com/nf-core/hlarnaseq/blob/master/CITATIONS.md
+    https://github.com/wtsi-hgi/hlarnaseq/blob/main/CITATIONS.md
 """
     command = "nextflow run ${workflow.manifest.name} --rna_samples rna_samples.csv --sample_key rna_wgs_key.csv --hla_region chr6:28500000-33400000 --gtf annotation.gtf --arcashla_reference_dir arcashla_reference/ --outdir <OUTDIR>"
 
@@ -229,7 +229,7 @@ workflow PIPELINE_COMPLETION {
     }
 
     workflow.onError {
-        log.error "Pipeline failed. Please refer to troubleshooting docs: https://nf-co.re/docs/usage/troubleshooting"
+        log.error "Pipeline failed. Please refer to docs/usage.md, or contact Gennadii Zakharov <gz3@sanger.ac.uk>"
     }
 }
 

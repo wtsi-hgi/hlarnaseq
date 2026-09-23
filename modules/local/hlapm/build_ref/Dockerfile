@@ -1,4 +1,4 @@
-# nf-core/hlarnaseq: HLAPM_BUILD_REF container image.
+# wtsi-hgi/hlarnaseq: HLAPM_BUILD_REF container image.
 #
 # Installs the R stack declared in this module's environment.yml AND bakes in
 # HLApm itself at a pinned commit.

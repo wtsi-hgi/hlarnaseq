@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run nf-core/hlarnaseq in the foreground with -profile singularity,sanger.
+# Run wtsi-hgi/hlarnaseq in the foreground with -profile singularity,sanger.
 #
 # All arguments are passed through to `nextflow run` unchanged, so anything
 # valid on a bare `nextflow run` command line works here. Use hlarnaseq-bsub
@@ -76,7 +76,7 @@ fi
 # dry run too: which profile and cache a run would use is most of what anyone
 # asks DRY_RUN in order to find out.
 {
-    echo "nf-core/hlarnaseq: ${PIPELINE_DIR}"
+    echo "wtsi-hgi/hlarnaseq: ${PIPELINE_DIR}"
     echo "profile:           ${profile_shown}"
     echo "container cache:   ${NXF_SINGULARITY_CACHEDIR:-<Nextflow default>}"
     echo

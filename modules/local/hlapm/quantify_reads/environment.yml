@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# nf-core/hlarnaseq: HLAPM_QUANTIFY_READS tool environment.
+# wtsi-hgi/hlarnaseq: HLAPM_QUANTIFY_READS tool environment.
 #
 # This is the legacy Python 2 stack bin/make_a_table_210804_allHLAgenes.py
 # needs, and it replaces the Python 2 half of the previously

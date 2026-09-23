@@ -13,7 +13,7 @@ workflow HLAPM {
     // --hlapm_repo is an optional override of the HLApm checkout baked into
     // HLAPM_BUILD_REF's container image, and mandatory when no container
     // engine is in use (enforced at launch by hlapmRepoExistsError() in
-    // subworkflows/local/utils_nfcore_hlarnaseq_pipeline). It is passed as a
+    // subworkflows/local/utils_wtsihgi_hlarnaseq_pipeline). It is passed as a
     // staged path input rather than read from params inside the module, so
     // that Nextflow mounts it into the container - the same reason
     // subworkflows/local/hlala passes its graph directory this way.

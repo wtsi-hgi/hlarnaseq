@@ -6,7 +6,7 @@ usage() {
 Usage:
   pipeline_testdata_run.sh [nextflow arguments...]
 
-Runs the local nf-core/hlarnaseq testdata through Nextflow.
+Runs the local wtsi-hgi/hlarnaseq testdata through Nextflow.
 
 Environment:
   PROFILE            Optional Nextflow profile to use. Default: unset
@@ -69,7 +69,7 @@ GTF_PATCHED="${ROOT_DIR}/testdata-make/hlarnases-testdata/reference/gencode.v50.
 mkdir -p "${RUN_DIR}"
 
 cd "${ROOT_DIR}"
-echo "Running nf-core/hlarnaseq testdata"
+echo "Running wtsi-hgi/hlarnaseq testdata"
 echo "Profile: ${PROFILE:-<none>}"
 echo "Run dir: ${RUN_DIR}"
 echo "Outdir: ${OUTDIR}"

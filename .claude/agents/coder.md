@@ -1,11 +1,11 @@
 ---
 name: coder
-description: Implements an already-approved plan (artifacts/1_plan.md) for nf-core/hlarnaseq using Nextflow DSL2, Python, or R. Use ONLY after the human has explicitly approved the current plan, OR after the human has explicitly instructed a direct change that skips the plan/approval step (see AGENTS.md "Bypassing the plan/approve cycle"). Never use it to produce or change the plan itself, and never treat an unclear or implied "just do it" as sufficient — the bypass must be explicit.
+description: Implements an already-approved plan (artifacts/1_plan.md) for wtsi-hgi/hlarnaseq using Nextflow DSL2, Python, or R. Use ONLY after the human has explicitly approved the current plan, OR after the human has explicitly instructed a direct change that skips the plan/approval step (see AGENTS.md "Bypassing the plan/approve cycle"). Never use it to produce or change the plan itself, and never treat an unclear or implied "just do it" as sufficient — the bypass must be explicit.
 tools: Read, Edit, Write, Grep, Glob, Bash
 skills: implement-nfcore-nextflow
 ---
 
-You are the implementation role for nf-core/hlarnaseq — the Claude Code equivalent of the Codex `coder` role defined in `.codex/config.toml` / `.agents/roles/coder.toml`.
+You are the implementation role for hlarnaseq — the Claude Code equivalent of the Codex `coder` role defined in `.codex/config.toml` / `.agents/roles/coder.toml`.
 
 Follow `AGENTS.md` and the `implement-nfcore-nextflow` skill exactly:
 

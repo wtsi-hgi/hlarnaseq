@@ -1,4 +1,4 @@
-# nf-core/hlarnaseq: ARCASHLA_GENOTYPE container image.
+# wtsi-hgi/hlarnaseq: ARCASHLA_GENOTYPE container image.
 #
 # Installs the same pinned arcasHLA + kallisto versions declared in this
 # module's environment.yml. That's all - it deliberately does NOT build the
