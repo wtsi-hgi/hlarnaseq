@@ -19,7 +19,7 @@
 set version [file tail [module-info version [module-info name]]]
 
 # ---- EDIT (1): installed pipeline repository ------------------------------
-set install /software/hgi/pipelines/wtsi-hgi-hlarnaseq/v1.0
+set install /software/hgi/pipelines/hlarnaseq/v1.0
 
 proc ModulesHelp { } {
     # Tcl procs do not see top-level variables implicitly: every variable used
