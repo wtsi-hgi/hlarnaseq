@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Builds an hlarnaseq `--wgs_samples` samplesheet from a folder of WGS
+# alignments:
+#
+#   <wgs_dir>/<sample>[.<anything>].bam   + <sample>[.<anything>].bam.bai
+#   <wgs_dir>/<sample>[.<anything>].cram  + <sample>[.<anything>].cram.crai
+#
+# The sample ID is the file name up to its first '.', e.g.
+# MelG13814781.merged.cram -> MelG13814781.
+#
+# CRAMs are decoded by HLA-LA's samtools via REF_PATH/REF_CACHE; see
+# docs/usage.md "CRAM input and the reference genome".
+# ---------------------------------------------------------------------------
+
+HEADER="WGS_sample_id,WGS_BAM_path,WGS_BAI_path"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  scripts/hlarnaseq_make_wgs_samplesheet [options] <wgs_dir>
+
+Scans <wgs_dir> for *.bam / *.cram files and writes an hlarnaseq WGS
+samplesheet (WGS_sample_id,WGS_BAM_path,WGS_BAI_path) with absolute paths.
+The sample ID is the file name up to its first '.'.
+
+Options:
+  -o, --output FILE  Samplesheet to write (default: ./wgs_samples.csv;
+                     use '-' for stdout).
+      --force        Overwrite an existing samplesheet.
+  -h, --help         Show this help.
+
+The index must be named <file>.bai (BAM) or <file>.crai (CRAM). A file
+without one is skipped with a warning and the script exits non-zero at the
+end.
+EOF
+}
+
+log() { printf '[hlarnaseq_make_wgs_samplesheet] %s\n' "$*" >&2; }
+die() { log "ERROR: $*"; exit 1; }
+
+output="wgs_samples.csv"
+force=0
+wgs_dir=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o|--output) [[ $# -ge 2 ]] || die "$1 needs a value"; output="$2"; shift 2 ;;
+        --force)     force=1; shift ;;
+        -h|--help)   usage; exit 0 ;;
+        -*)          usage >&2; die "unknown option: $1" ;;
+        *)
+            [[ -z "$wgs_dir" ]] || { usage >&2; die "only one <wgs_dir> may be given"; }
+            wgs_dir="$1"; shift ;;
+    esac
+done
+
+[[ -n "$wgs_dir" ]] || { usage >&2; exit 1; }
+[[ -d "$wgs_dir" ]] || die "WGS folder not found: $wgs_dir"
+wgs_dir="$(cd "$wgs_dir" && pwd -P)"
+
+if [[ "$output" != "-" && -e "$output" && $force -eq 0 ]]; then
+    die "samplesheet already exists: $output (use --force to overwrite)"
+fi
+
+tmp_sheet="$(mktemp)"
+trap 'rm -f "$tmp_sheet"' EXIT
+echo "$HEADER" > "$tmp_sheet"
+
+n_ok=0
+n_fail=0
+
+mapfile -d '' alns < <(find "$wgs_dir" -maxdepth 1 -type f \( -name '*.bam' -o -name '*.cram' \) -print0 | sort -z)
+[[ ${#alns[@]} -gt 0 ]] || die "no *.bam or *.cram files found in $wgs_dir"
+
+for aln in "${alns[@]}"; do
+    name="$(basename "$aln")"
+    sample="${name%%.*}"
+
+    if [[ "$aln" =~ [[:space:],] ]]; then
+        log "WARNING: path contains whitespace or a comma; skipping $aln"
+        n_fail=$((n_fail + 1)); continue
+    fi
+
+    case "$name" in
+        *.bam)  idx="${aln}.bai" ;;
+        *.cram) idx="${aln}.crai" ;;
+    esac
+    if [[ ! -f "$idx" ]]; then
+        log "WARNING: missing index $idx; skipping $sample"
+        n_fail=$((n_fail + 1)); continue
+    fi
+
+    echo "${sample},${aln},${idx}" >> "$tmp_sheet"
+    n_ok=$((n_ok + 1))
+done
+
+# WGS_sample_id must be unique in the samplesheet.
+dups="$(tail -n +2 "$tmp_sheet" | cut -d, -f1 | sort | uniq -d)"
+[[ -z "$dups" ]] || die "duplicate WGS_sample_id values found: $(echo "$dups" | tr '\n' ' ')"
+
+if [[ "$output" == "-" ]]; then
+    cat "$tmp_sheet"
+else
+    mkdir -p "$(dirname "$output")"
+    cp "$tmp_sheet" "$output"
+    log "wrote $n_ok sample(s) to $output"
+fi
+
+if [[ $n_fail -gt 0 ]]; then
+    log "WARNING: $n_fail file(s) skipped - see warnings above"
+    exit 2
+fi

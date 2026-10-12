@@ -38,8 +38,8 @@
                     "schema": "assets/schema_wgs_samples.json",
                     "mimetype": "text/csv",
                     "pattern": "^\\S+\\.csv$",
-                    "description": "Path to comma-separated file containing WGS BAM and BAI files.",
-                    "help_text": "Optional WGS samplesheet with the exact columns WGS_sample_id,WGS_BAM_path,WGS_BAI_path. All entries are mandatory. See [usage docs](docs/usage.md#wgs-samplesheet-input).",
+                    "description": "Path to comma-separated file containing WGS BAM/CRAM files and their indexes.",
+                    "help_text": "Optional WGS samplesheet with the exact columns WGS_sample_id,WGS_BAM_path,WGS_BAI_path. All entries are mandatory. Each row is a BAM with its `<BAM>.bai` index or a CRAM with its `<CRAM>.crai` index; the pipeline passes no reference FASTA, so CRAMs are decoded via the REF_PATH/REF_CACHE environment variables. See [usage docs](docs/usage.md#wgs-samplesheet-input).",
                     "fa_icon": "fas fa-file-csv"
                 },
                 "array_samples": {

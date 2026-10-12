@@ -16,16 +16,46 @@
             "WGS_BAM_path": {
                 "type": "string",
                 "format": "file-path",
-                "pattern": "^([\\S\\s]*\\/)?[^\\s\\/]+\\.(bam|BAM)$",
-                "errorMessage": "WGS BAM path must be provided, cannot contain spaces and must have extension '.bam'"
+                "pattern": "^([\\S\\s]*\\/)?[^\\s\\/]+\\.(bam|BAM|cram|CRAM)$",
+                "errorMessage": "WGS alignment path must be provided, cannot contain spaces and must have extension '.bam' or '.cram'"
             },
             "WGS_BAI_path": {
                 "type": "string",
                 "format": "file-path",
-                "pattern": "^([\\S\\s]*\\/)?[^\\s\\/]+\\.(bam|BAM)\\.(bai|BAI)$",
-                "errorMessage": "WGS BAI path must be provided, cannot contain spaces and must be named '<BAM file name>.bai' (i.e. end in '.bam.bai'), because HLA-LA resolves a BAM's index as '<BAM>.bai' and will not find an index named otherwise"
+                "pattern": "^([\\S\\s]*\\/)?[^\\s\\/]+\\.((bam|BAM)\\.(bai|BAI)|(cram|CRAM)\\.(crai|CRAI))$",
+                "errorMessage": "WGS index path must be provided, cannot contain spaces and must be named '<alignment file name>.bai' for a BAM (i.e. end in '.bam.bai') or '<alignment file name>.crai' for a CRAM (i.e. end in '.cram.crai'), because HLA-LA resolves the index by appending '.bai'/'.crai' to the alignment path and will not find an index named otherwise"
             }
         },
-        "required": ["WGS_sample_id", "WGS_BAM_path", "WGS_BAI_path"]
+        "required": ["WGS_sample_id", "WGS_BAM_path", "WGS_BAI_path"],
+        "allOf": [
+            {
+                "if": {
+                    "required": ["WGS_BAM_path"],
+                    "properties": { "WGS_BAM_path": { "pattern": "\\.(cram|CRAM)$" } }
+                },
+                "then": {
+                    "properties": {
+                        "WGS_BAI_path": {
+                            "pattern": "\\.(cram|CRAM)\\.(crai|CRAI)$",
+                            "errorMessage": "WGS_BAI_path must be a CRAM index ('<CRAM file name>.crai') when WGS_BAM_path is a CRAM"
+                        }
+                    }
+                }
+            },
+            {
+                "if": {
+                    "required": ["WGS_BAM_path"],
+                    "properties": { "WGS_BAM_path": { "pattern": "\\.(bam|BAM)$" } }
+                },
+                "then": {
+                    "properties": {
+                        "WGS_BAI_path": {
+                            "pattern": "\\.(bam|BAM)\\.(bai|BAI)$",
+                            "errorMessage": "WGS_BAI_path must be a BAM index ('<BAM file name>.bai') when WGS_BAM_path is a BAM"
+                        }
+                    }
+                }
+            }
+        ]
     }
 }

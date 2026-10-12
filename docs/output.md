@@ -14,7 +14,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 - [arcasHLA read extraction and validation](#arcashla-read-extraction-and-validation) - Prepare and validate paired RNA reads for arcasHLA genotyping
 - [arcasHLA genotyping](#arcashla-genotyping) - HLA genotyping from validated RNA-seq reads
-- [HLA-LA](#hla-la) - HLA typing from WGS BAM inputs
+- [HLA-LA](#hla-la) - HLA typing from WGS inputs
 - [HLA consensus](#hla-consensus) - RNA/WGS HLA consensus calling
 - [HLA personalized reference (HLApm)](#hla-personalized-reference-hlapm) - Personalized HLA reference building from consensus alleles
 - [HLApm STAR index](#hlapm-star-index) - Deduplicated STAR genome indexing of personalized HLA allele references
@@ -67,7 +67,7 @@ The extracted files are concatenated gzip streams and are accepted by standard g
   - `<sample_id>/`: HLA-LA's complete per-sample output directory, published in full (see the note on hard links below):
     - `hla/`: the typing results, including `R1_bestguess_G.txt` (the G-group best guess file the combined TSV is built from), `R1_bestguess.txt`, and HLA-LA's full supporting output (`R1_pileup_*.txt`, `R1_PP_*_pairs.txt`, `R1_readIDs_*.txt`, `R1_columnIncompatibilities_*.txt`, `R1_parameters.txt`, `histogram_matchesPerRead.txt`, `summaryStatistics.txt`).
     - `reads_per_level.txt`: read counts per graph level.
-    - `extraction.bam`, `extraction.bam.bai`, `extraction_mapped.bam`, `extraction_unmapped.bam`, `remapped_with_a.bam`, `remapped_with_a.bam.bai`, `R_1.fastq`, `R_2.fastq`, `R_U.fastq`: HLA-LA's own intermediates. These are large (multiple gigabytes per sample on real WGS BAMs) and are reproducible from the input BAM, so they are not usually of interest - they appear here only because publishing this directory is all-or-nothing, as explained below.
+    - `extraction.bam`, `extraction.bam.bai`, `extraction_mapped.bam`, `extraction_unmapped.bam`, `remapped_with_a.bam`, `remapped_with_a.bam.bai`, `R_1.fastq`, `R_2.fastq`, `R_U.fastq`: HLA-LA's own intermediates. These are large (multiple gigabytes per sample on real WGS BAMs) and are reproducible from the input BAM/CRAM, so they are not usually of interest - they appear here only because publishing this directory is all-or-nothing, as explained below.
 
 </details>
 

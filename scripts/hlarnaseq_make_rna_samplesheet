@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Builds an hlarnaseq `--rna_samples` samplesheet from a STAR output folder.
+#
+# Expects one sub-directory per sample, as written by STAR with
+# `--outSAMtype BAM SortedByCoordinate --outReadsUnmapped Fastx`:
+#
+#   <star_dir>/<sample>/<sample>.Aligned.sortedByCoord.out.bam
+#   <star_dir>/<sample>/<sample>.Aligned.sortedByCoord.out.bam.bai
+#   <star_dir>/<sample>/<sample>.Unmapped.out.mate1
+#   <star_dir>/<sample>/<sample>.Unmapped.out.mate2
+#
+# STAR writes the unmapped mates as uncompressed FASTQ with no extension, but
+# the pipeline only accepts `.fq.gz`/`.fastq.gz` (assets/schema_rna_samples.json),
+# so each pair is gzip-compressed to
+#
+#   <sample>.unmapped_1.fastq.gz / <sample>.unmapped_2.fastq.gz
+#
+# This is an operator-side helper run before launching the pipeline; it needs
+# only coreutils and gzip (pigz is used instead when available).
+# ---------------------------------------------------------------------------
+
+BAM_SUFFIX=".Aligned.sortedByCoord.out.bam"
+HEADER="rna_id,bam,bai,unpaired_r1,unpaired_r2"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  scripts/hlarnaseq_make_rna_samplesheet [options] <star_dir>
+
+Scans <star_dir> for STAR per-sample folders, gzip-compresses each sample's
+Unmapped.out.mate1/mate2 FASTQs (next to the STAR files) and writes an hlarnaseq RNA samplesheet
+(rna_id,bam,bai,unpaired_r1,unpaired_r2) with absolute paths.
+
+Options:
+  -o, --output FILE      Samplesheet to write (default: ./rna_samples.csv;
+                         use '-' for stdout).
+  -t, --threads N        Compression threads when pigz is available (default: 4).
+      --remove-original  Delete Unmapped.out.mate1/mate2 after successful
+                         compression (default: keep them).
+      --force            Recompress even when the .fastq.gz files already exist,
+                         and overwrite an existing samplesheet.
+  -n, --dry-run          Print what would be done; compress nothing and write
+                         no samplesheet.
+  -h, --help             Show this help.
+
+Already-compressed outputs are reused, so the script can be re-run after an
+interruption. Compression writes to a temporary file that is renamed only on
+success, so a partial .fastq.gz is never left behind under the final name.
+
+A sample is skipped with a warning (and the script exits non-zero at the end)
+when its BAM index or either unmapped mate is missing. The pipeline is
+paired-end only, so single-end STAR output (no mate2) cannot be used.
+EOF
+}
+
+log() { printf '[hlarnaseq_make_rna_samplesheet] %s\n' "$*" >&2; }
+die() { log "ERROR: $*"; exit 1; }
+
+output="rna_samples.csv"
+threads=4
+remove_original=0
+force=0
+dry_run=0
+star_dir=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o|--output)      [[ $# -ge 2 ]] || die "$1 needs a value"; output="$2"; shift 2 ;;
+        -t|--threads)     [[ $# -ge 2 ]] || die "$1 needs a value"; threads="$2"; shift 2 ;;
+        --remove-original) remove_original=1; shift ;;
+        --force)          force=1; shift ;;
+        -n|--dry-run)     dry_run=1; shift ;;
+        -h|--help)        usage; exit 0 ;;
+        -*)               usage >&2; die "unknown option: $1" ;;
+        *)
+            [[ -z "$star_dir" ]] || { usage >&2; die "only one <star_dir> may be given"; }
+            star_dir="$1"; shift ;;
+    esac
+done
+
+[[ -n "$star_dir" ]] || { usage >&2; exit 1; }
+[[ -d "$star_dir" ]] || die "STAR output folder not found: $star_dir"
+[[ "$threads" =~ ^[1-9][0-9]*$ ]] || die "--threads must be a positive integer: $threads"
+star_dir="$(cd "$star_dir" && pwd -P)"
+
+if [[ "$output" != "-" && -e "$output" && $force -eq 0 && $dry_run -eq 0 ]]; then
+    die "samplesheet already exists: $output (use --force to overwrite)"
+fi
+
+if command -v pigz >/dev/null 2>&1; then
+    compressor=(pigz -p "$threads" -c)
+else
+    compressor=(gzip -c)
+fi
+
+# compress_fastq <src> <dest>: gzip <src> to <dest> atomically.
+compress_fastq() {
+    local src="$1" dest="$2"
+    if [[ -s "$dest" && $force -eq 0 ]]; then
+        log "  reuse    $dest"
+        return 0
+    fi
+    [[ -f "$src" ]] || { log "  WARNING: missing $src"; return 1; }
+    if [[ $dry_run -eq 1 ]]; then
+        log "  compress $src -> $dest (dry run)"
+        return 0
+    fi
+    log "  compress $src -> $dest"
+    # Global so the EXIT trap can clean it up if the script is interrupted.
+    current_tmp="${dest}.tmp.$$"
+    if ! "${compressor[@]}" "$src" > "$current_tmp"; then
+        rm -f "$current_tmp"; current_tmp=""
+        log "  WARNING: compression failed for $src"
+        return 1
+    fi
+    mv -f "$current_tmp" "$dest"
+    current_tmp=""
+}
+
+current_tmp=""
+tmp_sheet="$(mktemp)"
+trap 'rm -f "$tmp_sheet" "${current_tmp:-}"' EXIT
+echo "$HEADER" > "$tmp_sheet"
+
+n_ok=0
+n_fail=0
+
+mapfile -d '' bams < <(find "$star_dir" -mindepth 2 -maxdepth 2 -type f -name "*${BAM_SUFFIX}" -print0 | sort -z)
+[[ ${#bams[@]} -gt 0 ]] || die "no *${BAM_SUFFIX} files found under $star_dir"
+
+for bam in "${bams[@]}"; do
+    sample_dir="$(dirname "$bam")"
+    sample="$(basename "$bam" "$BAM_SUFFIX")"
+    prefix="${sample_dir}/${sample}"
+    log "sample $sample"
+
+    if [[ "$sample" =~ [[:space:],] || "$bam" =~ [[:space:],] ]]; then
+        log "  WARNING: sample name or path contains whitespace or a comma; skipping"
+        n_fail=$((n_fail + 1)); continue
+    fi
+
+    bai="${bam}.bai"
+    if [[ ! -f "$bai" ]]; then
+        log "  WARNING: missing BAM index $bai; skipping"
+        n_fail=$((n_fail + 1)); continue
+    fi
+
+    r1_gz="${prefix}.unmapped_1.fastq.gz"
+    r2_gz="${prefix}.unmapped_2.fastq.gz"
+
+    if ! compress_fastq "${prefix}.Unmapped.out.mate1" "$r1_gz" \
+        || ! compress_fastq "${prefix}.Unmapped.out.mate2" "$r2_gz"; then
+        log "  WARNING: unmapped mates unavailable; skipping $sample"
+        n_fail=$((n_fail + 1)); continue
+    fi
+
+    if [[ $remove_original -eq 1 && $dry_run -eq 0 ]]; then
+        rm -f "${prefix}.Unmapped.out.mate1" "${prefix}.Unmapped.out.mate2"
+    fi
+
+    echo "${sample},${bam},${bai},${r1_gz},${r2_gz}" >> "$tmp_sheet"
+    n_ok=$((n_ok + 1))
+done
+
+# rna_id must be unique in the samplesheet.
+dups="$(tail -n +2 "$tmp_sheet" | cut -d, -f1 | sort | uniq -d)"
+[[ -z "$dups" ]] || die "duplicate rna_id values found: $(echo "$dups" | tr '\n' ' ')"
+
+if [[ $dry_run -eq 1 ]]; then
+    log "dry run: $n_ok sample(s) would be written; samplesheet preview:"
+    cat "$tmp_sheet" >&2
+elif [[ "$output" == "-" ]]; then
+    cat "$tmp_sheet"
+else
+    mkdir -p "$(dirname "$output")"
+    cp "$tmp_sheet" "$output"
+    log "wrote $n_ok sample(s) to $output"
+fi
+
+if [[ $n_fail -gt 0 ]]; then
+    log "WARNING: $n_fail sample(s) skipped - see warnings above"
+    exit 2
+fi

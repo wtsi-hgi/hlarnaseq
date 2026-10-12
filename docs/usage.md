@@ -107,7 +107,7 @@ This builds and tags the Docker image as `quay.io/hlarnaseq/arcashla-genotype:0.
 
 ## WGS samplesheet input
 
-Optionally provide WGS BAM inputs with `--wgs_samples`:
+Optionally provide WGS BAM or CRAM inputs with `--wgs_samples`:
 
 ```bash
 --wgs_samples '[path to WGS samplesheet file]'
@@ -120,17 +120,17 @@ WGS_sample_id,WGS_BAM_path,WGS_BAI_path
 NA12878,testdata-make/hlarnases-testdata/wgs/NA12878.chr6_hla.GRCh38.bam,testdata-make/hlarnases-testdata/wgs/NA12878.chr6_hla.GRCh38.bam.bai
 ```
 
-| Column          | Description                                                                                                          |
-| --------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `WGS_sample_id` | WGS sample identifier. This entry is mandatory and cannot contain spaces.                                            |
-| `WGS_BAM_path`  | Path to the WGS BAM file. This entry is mandatory and must end in `.bam`.                                            |
-| `WGS_BAI_path`  | Path to the WGS BAI index. This entry is mandatory and must be named `<BAM file name>.bai` (i.e. end in `.bam.bai`). |
+| Column          | Description                                                                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WGS_sample_id` | WGS sample identifier. This entry is mandatory and cannot contain spaces.                                                                                      |
+| `WGS_BAM_path`  | Path to the WGS BAM or CRAM file. This entry is mandatory and must end in `.bam` or `.cram`.                                                                   |
+| `WGS_BAI_path`  | Path to its index. This entry is mandatory and must be named `<BAM file name>.bai` (ending in `.bam.bai`) or `<CRAM file name>.crai` (ending in `.cram.crai`). |
 
-Each row is validated and loaded as a separate WGS sample channel entry. Relative BAM and BAI paths are resolved from the directory containing the WGS samplesheet, the launch directory, or the pipeline project directory. An [example WGS samplesheet](../assets/wgs_samples.csv) has been provided with the pipeline.
+The column names keep their historical `BAM`/`BAI` spelling for CRAM rows too, and BAM and CRAM rows can be mixed in one samplesheet. Each row is validated and loaded as a separate WGS sample channel entry. Use absolute paths, or paths relative to the directory the pipeline is launched from; unlike the RNA samplesheet, relative WGS paths are currently not resolved against the samplesheet's own directory or the pipeline project directory. An [example WGS samplesheet](../assets/wgs_samples.csv) has been provided with the pipeline. To build one from a folder of `*.bam`/`*.cram` files, run `scripts/hlarnaseq_make_wgs_samplesheet <wgs_dir>`.
 
-The index must be named exactly `<BAM file name>.bai` (for example `NA12878.bam` + `NA12878.bam.bai`), not `<BAM base name>.bai`: HLA-LA resolves a BAM's index by appending `.bai` to the BAM path, and will not find an index named otherwise. This is enforced by [`assets/schema_wgs_samples.json`](../assets/schema_wgs_samples.json), so a mismatch fails at samplesheet validation rather than deep inside HLA-LA.
+The index must be named exactly `<alignment file name>.bai` or `.crai` (for example `NA12878.bam` + `NA12878.bam.bai`, or `NA12878.cram` + `NA12878.cram.crai`), not `<base name>.bai`: HLA-LA resolves the index by appending `.bai`/`.crai` to the alignment path, and will not find an index named otherwise. [`assets/schema_wgs_samples.json`](../assets/schema_wgs_samples.json) enforces the extensions, including that a `.cram` is paired with a `.cram.crai` and a `.bam` with a `.bam.bai`, so those mistakes fail at samplesheet validation rather than deep inside HLA-LA. It cannot check that the index name otherwise matches the alignment name.
 
-When `--wgs_samples` is provided, the pipeline runs HLA-LA once per WGS BAM and combines the reported G-group allele calls into `hlala/HLA-LA_combined.tsv`.
+When `--wgs_samples` is provided, the pipeline runs HLA-LA once per WGS BAM/CRAM and combines the reported G-group allele calls into `hlala/HLA-LA_combined.tsv`.
 HLA-LA itself (and the samtools/bwa/picard tooling it shells out to) is provisioned by the `HLALA_TYPING` module's own `environment.yml`/`conda` directive and matching pinned `container` (`hla-la=1.0.4`), resolved automatically by Nextflow under `-profile conda`/`docker`/`singularity`/`apptainer`. The image is public, so nothing has to be built locally for it - only the graph below is prepared out of band.
 
 The prepared HLA-LA **graph**, however, remains a required, separately-prepared input: the pipeline never downloads, builds, or packages HLA-LA graph data (the `hlala/preparegraph` step is deliberately not wired in), the same pattern as `--arcashla_reference_dir` for arcasHLA above.
@@ -144,6 +144,18 @@ nextflow run wtsi-hgi/hlarnaseq \
     --hlala_graph_dir /path/to/HLA-LA/graphs \
     --outdir ./results
 ```
+
+### CRAM input and the reference genome
+
+Reading a CRAM requires the reference genome it was compressed against. The pipeline does **not** take a reference FASTA for this and passes none to HLA-LA: samtools inside the `HLALA_TYPING` container finds the reference through the standard htslib `REF_PATH`/`REF_CACHE` environment variables of the environment the pipeline is launched from. For example, on the Sanger farm these are set by default, LSF copies them into each job, and the `sanger` profile mounts `/lustre`, `/nfs`, `/data` and `/software` into the container.
+
+Elsewhere, make sure that:
+
+- `REF_PATH` (and `REF_CACHE`, if used) are set where the tasks run;
+- the directories they point to are visible inside the container (add bind mounts if they are outside the paths your profile mounts);
+- under `-profile docker`, the variables are forwarded into the container (for example with `docker.envWhitelist = 'REF_PATH,REF_CACHE'` in a custom config), since Docker does not pass the host environment through.
+
+Without a usable local reference, samtools falls back to downloading the reference sequences from the EBI reference server named in the CRAM header, which is slow and fails on compute nodes without network access.
 
 ### Preparing the HLA-LA graph
 

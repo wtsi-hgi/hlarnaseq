@@ -1,0 +1,90 @@
+nextflow_pipeline {
+
+    name "Test pipeline - WGS samplesheet BAM/CRAM validation"
+    script "../main.nf"
+    tag "pipeline"
+    tag "pipeline_wgs_samplesheet"
+
+    // The WGS alignment may be a BAM (+ <bam>.bai) or a CRAM (+ <cram>.crai);
+    // assets/schema_wgs_samples.json rejects a mismatched pair. The fixtures
+    // are empty files: run in stub form, nothing reads them, so these tests
+    // cover samplesheet validation and channel wiring only - not whether
+    // HLA-LA's samtools can decode a real CRAM (that relies on REF_PATH, see
+    // docs/usage.md "CRAM input and the reference genome").
+    test("BAM and CRAM rows are accepted and reach HLALA_TYPING") {
+
+        options "-stub-run"
+
+        when {
+            params {
+                // Rewritten with absolute paths: validateWgsSamplesheetFile()
+                // only finds relative entries under the launch directory,
+                // which nf-test sets to its own per-test folder.
+                def fixtures = "$projectDir/tests/fixtures/wgs"
+                def sheet    = new File("$outputDir/cram_ok.csv")
+                sheet.parentFile.mkdirs()
+                sheet.text = new File("$fixtures/cram_ok.csv").text.replace('tests/fixtures/wgs', fixtures)
+
+                outdir          = "$outputDir"
+                wgs_samples     = sheet.path
+                // An empty stand-in graph: the launch-time graph check only
+                // looks for a bwa index when the graph has an extended
+                // reference FASTA, and this one has none.
+                hlala_graph_dir = "$projectDir/tests/fixtures/wgs/hlala_graph"
+            }
+        }
+
+        then {
+            def typing = workflow.trace.tasks().findAll { it.name.contains('HLALA_TYPING') }
+            assertAll(
+                { assert workflow.success },
+                { assert typing.size() == 2 },
+                { assert typing.any { it.name.contains('(WGS_CRAM)') } },
+                { assert typing.any { it.name.contains('(WGS_BAM)') } },
+                { assert new File("$outputDir/hlala/HLA-LA_combined.tsv").readLines()[0] == 'sample_id\tLocus\tHLA_allele' }
+            )
+        }
+    }
+
+    test("reject a CRAM paired with a .bai index") {
+
+        options "-stub-run"
+
+        when {
+            params {
+                outdir          = "$outputDir"
+                wgs_samples     = "$projectDir/tests/fixtures/wgs/cram_with_bai.csv"
+                hlala_graph_dir = "$projectDir/tests/fixtures/wgs/hlala_graph"
+            }
+        }
+
+        then {
+            assertAll(
+                { assert workflow.failed },
+                { assert workflow.stderr.any { it.contains('must be a CRAM index') } ||
+                         workflow.errorReport.contains('must be a CRAM index') }
+            )
+        }
+    }
+
+    test("reject a BAM paired with a .crai index") {
+
+        options "-stub-run"
+
+        when {
+            params {
+                outdir          = "$outputDir"
+                wgs_samples     = "$projectDir/tests/fixtures/wgs/bam_with_crai.csv"
+                hlala_graph_dir = "$projectDir/tests/fixtures/wgs/hlala_graph"
+            }
+        }
+
+        then {
+            assertAll(
+                { assert workflow.failed },
+                { assert workflow.stderr.any { it.contains('must be a BAM index') } ||
+                         workflow.errorReport.contains('must be a BAM index') }
+            )
+        }
+    }
+}
