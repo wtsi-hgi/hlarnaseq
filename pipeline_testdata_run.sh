@@ -107,6 +107,7 @@ nextflow -log "${NEXTFLOW_LOG}" \
     run . \
     -work-dir "${NEXTFLOW_WORKDIR}" \
     -profile singularity \
+    -config conf/resources.config \
     -resume \
     --gtf "$GTF_PATCHED" \
     --arcashla_reference_dir "$ARCASHLA_REF" \
