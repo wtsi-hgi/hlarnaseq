@@ -14,7 +14,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io/) and processes d
 
 - [arcasHLA read extraction and validation](#arcashla-read-extraction-and-validation) - Prepare and validate paired RNA reads for arcasHLA genotyping
 - [arcasHLA genotyping](#arcashla-genotyping) - HLA genotyping from validated RNA-seq reads
-- [HLA-LA](#hla-la) - HLA typing from WGS inputs
+- [HLA-LA](#hla-la) - HLA typing from WGS BAM/CRAM inputs
 - [HLA consensus](#hla-consensus) - RNA/WGS HLA consensus calling
 - [HLA personalized reference (HLApm)](#hla-personalized-reference-hlapm) - Personalized HLA reference building from consensus alleles
 - [HLApm STAR index](#hlapm-star-index) - Deduplicated STAR genome indexing of personalized HLA allele references

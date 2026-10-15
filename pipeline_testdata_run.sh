@@ -133,3 +133,7 @@ nextflow -log "${NEXTFLOW_LOG}" \
 #
 #     --wgs_samples "${WGS_SAMPLESHEET}" \
 #     --hlala_graph_dir "$HLALA_GRAPHS"  \
+
+#    --array_samples "${ARRAY_SAMPLESHEET}" \
+#    --hibag_model "${HIBAG_MODEL}" \
+#    --hibag_match_type "${HIBAG_MATCH_TYPE}" \

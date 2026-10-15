@@ -10,6 +10,10 @@ set -euo pipefail
 #      and only, what nf-core's `hlala/preparegraph` module does; and
 #   2. `bwa index` over `extendedReferenceGenome/extendedReferenceGenome.fa`.
 #
+# It then installs the reference specifications HLA-LA bundles for the graph
+# (`additionalReferences/<graph>/*.txt`) into the graph's `knownReferences/` -
+# see the comment on step 7b for why the pipeline never sees them otherwise.
+#
 # Step 2 is not part of `prepareGraph`, and the published tarball does not ship
 # it: `mapping_PRGonly/referenceGenome.fa` arrives pre-indexed but
 # `extendedReferenceGenome/` contains the FASTA alone. HLA-LA therefore builds
@@ -41,6 +45,18 @@ sample, all concurrent HLALA_TYPING tasks would start that same `bwa index` at
 once and clobber each other's output, so all but (at most) one sample fails.
 Building it here, once, out of band, removes the race.
 
+Finally, it copies the reference specifications HLA-LA bundles for this graph
+(additionalReferences/<GRAPH_NAME>/*.txt in the same image) into the graph's
+knownReferences/. HLA-LA only types a BAM/CRAM whose header (contig names AND
+lengths, exactly) matches one spec file, and the published graph package ships
+just four of them - so without this step inputs aligned to e.g. the GRCh38
+no-alt analysis set + EBV (Sanger GRCh38_15, Illumina), GEL B38 or hg19 fail
+with "Have found no compatible reference specifications". Files already in
+knownReferences/ are never overwritten, and a bundled spec describing the same
+contig set as one already there is skipped (HLA-LA refuses to run when two
+specs match). What was installed is recorded in
+<GRAPH_NAME>/.hlarnaseq_additional_references.
+
 Unlike arcasHLA's reference, this image is public (Biocontainers/Galaxy
 depot), so there is no companion build_image_*.sh script: the container is
 pulled on first use.
@@ -63,14 +79,14 @@ What to expect before you start it:
 Point the pipeline at the result with (both values are printed on success):
   --hlala_graph_dir <output-dir> --hlala_graph <GRAPH_NAME>
 
-Re-running is free: if the graph is already fully indexed, the script says so
+Re-running is free: if the graph is already fully prepared, the script says so
 and exits without downloading, extracting or indexing anything - it checks that
 BEFORE the download, so pointing it at a finished graph costs nothing. Each
-indexing step is skipped independently when its own output is already there, so
-a graph built by an earlier version of this script (serializedGRAPH present,
-bwa index missing) is repaired by just re-running the script on the same
-directory: it adds the missing bwa index and neither re-downloads nor
-re-serializes. To force a full rebuild, delete the graph directory
+step is skipped independently when its own output is already there, so a graph
+built by an earlier version of this script (serializedGRAPH present, bwa index
+and/or the additional reference specifications missing) is repaired by just
+re-running the script on the same directory: it adds only what is missing and
+neither re-downloads nor re-serializes. To force a full rebuild, delete the graph directory
 (<output-dir>/<GRAPH_NAME>) and re-run. That is deliberately the only way to do
 it; there is no FORCE_* override (see the comment where the check is
 implemented).
@@ -133,6 +149,11 @@ HLALA_BIN="/usr/local/opt/hla-la/bin/HLA-LA"
 # find_path() falls through to `which bwa`). Hard-coding a prefix here would
 # only add a way for the two to disagree.
 BWA_BIN="bwa"
+# Where the bioconda hla-la package puts its source tree (`mv ./src
+# $PREFIX/opt/hla-la/` in the recipe's build.sh; PREFIX is /usr/local in the
+# Biocontainers image). HLA-LA.pl reads `$bin_dir/additionalReferences/$graph`
+# from here itself, but only when `--graph` is passed - see step 7b.
+ADDITIONAL_REFS_ROOT="/usr/local/opt/hla-la/src/additionalReferences"
 
 mkdir -p "$1" 2>/dev/null || {
     echo "ERROR: cannot create output directory '$1' - check the path and its permissions." >&2
@@ -144,6 +165,9 @@ if [[ ! -w "${OUTPUT_DIR}" ]]; then
     exit 1
 fi
 GRAPH_DIR="${OUTPUT_DIR}/${GRAPH_NAME}"
+# Written last by step 7b. Not a *.txt file and not inside knownReferences/,
+# so HLA-LA.pl (which globs knownReferences/*.txt) never reads it.
+ADDITIONAL_REFS_MARKER="${GRAPH_DIR}/.hlarnaseq_additional_references"
 
 # Resolve the extended reference genome FASTA exactly the way HLA-LA's own
 # binary does in its `--action HLA` path (src/HLA-LA.cpp): the path named on the
@@ -196,19 +220,29 @@ extended_reference_is_indexed() {
 # --------------------------------------------------------------------------
 EXT_REF_FASTA="$(extended_reference_fasta)"
 
+ONLY_ADDITIONAL_REFS=""
 if [[ -s "${GRAPH_DIR}/serializedGRAPH" ]] && extended_reference_is_indexed "${EXT_REF_FASTA}"; then
-    echo "Graph already indexed: ${GRAPH_DIR}/serializedGRAPH and the bwa index for"
-    echo "${EXT_REF_FASTA} are both present and non-empty."
-    echo "Nothing to download or index. To rebuild, remove ${GRAPH_DIR} and re-run."
+    if [[ -e "${ADDITIONAL_REFS_MARKER}" ]]; then
+        echo "Graph already indexed: ${GRAPH_DIR}/serializedGRAPH and the bwa index for"
+        echo "${EXT_REF_FASTA} are both present and non-empty, and the additional"
+        echo "reference specifications are installed (${ADDITIONAL_REFS_MARKER})."
+        echo "Nothing to download or index. To rebuild, remove ${GRAPH_DIR} and re-run."
+        echo
+        echo "Use it with: --hlala_graph_dir ${OUTPUT_DIR} --hlala_graph ${GRAPH_NAME}"
+        exit 0
+    fi
+    # Indexed by an earlier version of this script, before step 7b existed.
+    echo "Graph at ${GRAPH_DIR} is indexed, but HLA-LA's additional reference specifications"
+    echo "have not been installed into its knownReferences/. Only those will be added:"
+    echo "nothing is downloaded, extracted, serialized or bwa-indexed."
     echo
-    echo "Use it with: --hlala_graph_dir ${OUTPUT_DIR} --hlala_graph ${GRAPH_NAME}"
-    exit 0
+    ONLY_ADDITIONAL_REFS="yes"
 fi
 
 # A graph left half-finished by an earlier version of this script (which did
 # not build the bwa index at all), or by an interrupted run. Say so plainly,
 # because from here on the script skips almost everything.
-if [[ -s "${GRAPH_DIR}/serializedGRAPH" ]]; then
+if [[ -s "${GRAPH_DIR}/serializedGRAPH" && -z "${ONLY_ADDITIONAL_REFS}" ]]; then
     echo "Graph at ${GRAPH_DIR} is serialized but its extended reference genome is not"
     echo "bwa-indexed. Only the missing bwa index will be built: nothing is downloaded,"
     echo "extracted, or re-serialized."
@@ -241,9 +275,14 @@ fi
 # point for us, so this is correct whether OUTPUT_DIR is on / or on a
 # separately mounted volume). POSIX `df -Pk` for portability; column 4 is the
 # available space in 1 KB blocks.
+#
+# Both this and the memory check below are about downloading and indexing, so
+# they are skipped when only a few KB of reference specifications are added.
 AVAILABLE_KB="$(df -Pk "${OUTPUT_DIR}" | awk 'NR == 2 { print $4 }')"
 REQUIRED_KB=$(( REQUIRED_GB * 1024 * 1024 ))
-if [[ -z "${AVAILABLE_KB}" ]]; then
+if [[ -n "${ONLY_ADDITIONAL_REFS}" ]]; then
+    :
+elif [[ -z "${AVAILABLE_KB}" ]]; then
     echo "WARNING: could not determine free space on ${OUTPUT_DIR}; skipping the space check." >&2
 elif (( AVAILABLE_KB < REQUIRED_KB )); then
     echo "ERROR: not enough free space on ${OUTPUT_DIR}'s filesystem." >&2
@@ -262,7 +301,7 @@ if [[ -r /proc/meminfo ]]; then
 elif command -v sysctl >/dev/null 2>&1; then
     TOTAL_RAM_KB="$(( $(sysctl -n hw.memsize) / 1024 ))"
 fi
-if [[ -n "${TOTAL_RAM_KB}" ]] && (( TOTAL_RAM_KB < 40 * 1024 * 1024 )); then
+if [[ -z "${ONLY_ADDITIONAL_REFS}" && -n "${TOTAL_RAM_KB}" ]] && (( TOTAL_RAM_KB < 40 * 1024 * 1024 )); then
     echo "WARNING: this machine has $(( TOTAL_RAM_KB / 1024 / 1024 )) GB of RAM. HLA-LA's README says indexing" >&2
     echo "         \"can take a few hours and might take up to 40G of memory\". Proceeding anyway;" >&2
     echo "         if the container is killed by the OOM killer, that is why." >&2
@@ -294,7 +333,9 @@ if [[ -d "${GRAPH_DIR}" ]] && [[ -s "${GRAPH_DIR}/sequences.txt" ]]; then
     # An extracted-but-not-yet-indexed graph: a previous run was interrupted
     # during (or before) indexing. Skip straight to indexing rather than
     # re-downloading 2.25 GB to recreate files we already have.
-    echo "Found an extracted but unindexed graph at ${GRAPH_DIR}; skipping download and extraction."
+    if [[ -z "${ONLY_ADDITIONAL_REFS}" ]]; then
+        echo "Found an extracted but unindexed graph at ${GRAPH_DIR}; skipping download and extraction."
+    fi
     SKIP_EXTRACT="yes"
 fi
 
@@ -516,6 +557,133 @@ else
         echo "       check the output above for the actual failure and re-run." >&2
         exit 1
     fi
+fi
+
+# --------------------------------------------------------------------------
+# 7b. Install HLA-LA's bundled reference specifications into knownReferences/.
+#
+#    WHY THIS STEP EXISTS. HLA-LA.pl only types an input whose `samtools
+#    idxstats` contig set (names AND lengths, including `*`) is EXACTLY equal
+#    to that of one *.txt spec - a superset does not count, and zero or two
+#    matches are both fatal. It searches knownReferences/ and, when `--graph`
+#    is given, also `$bin_dir/additionalReferences/$graph/` inside its own
+#    install. nf-core's HLALA_TYPING passes only `--customGraphDir <graph dir>`
+#    and never `--graph`, so the bundled specs are never consulted and only the
+#    four shipped in the graph tarball apply. Copying the bundled ones into
+#    knownReferences/ restores what HLA-LA does when called the way its README
+#    shows, without modifying the nf-core module.
+#
+#    They are taken from the same pinned image the pipeline runs, so they are
+#    exactly the specs this hla-la build knows about - no network access.
+#
+#    Never overwrite a file already in knownReferences/, and never add a spec
+#    whose contig set equals one already there: HLA-LA dies with "Found more
+#    than one compatible reference file" on any input matching both. The file
+#    already present wins.
+# --------------------------------------------------------------------------
+
+# HLA-LA's match key for a spec: its contigID and contigLength columns, header
+# and blank lines excluded, order-independent.
+spec_signature() {
+    tail -n +2 "$1" | awk -F'\t' 'NF { print $1 "\t" $2 }' | LC_ALL=C sort | {
+        if command -v md5sum >/dev/null 2>&1; then
+            md5sum | awk '{ print $1 }'
+        else
+            md5 -q
+        fi
+    }
+}
+
+KNOWN_REFS_DIR="${GRAPH_DIR}/knownReferences"
+ADDITIONAL_REFS_SRC="${ADDITIONAL_REFS_ROOT}/${GRAPH_NAME}"
+
+if [[ -e "${ADDITIONAL_REFS_MARKER}" ]]; then
+    echo
+    echo "Skipping additional reference specifications: already installed (${ADDITIONAL_REFS_MARKER})."
+elif [[ ! -d "${KNOWN_REFS_DIR}" ]]; then
+    # Reported again by the file-set check below; nothing to install into.
+    echo
+    echo "WARNING: ${KNOWN_REFS_DIR} does not exist, so no additional reference" >&2
+    echo "         specifications were installed." >&2
+else
+    echo
+    echo "Installing HLA-LA's bundled reference specifications from ${ADDITIONAL_REFS_SRC}"
+    echo "(inside the image) into ${KNOWN_REFS_DIR} ..."
+
+    # Staged inside the graph directory so the container needs no mount beyond
+    # the one every other step uses; removed again before this step ends.
+    STAGING_DIR="${GRAPH_DIR}/.additional_references.staging"
+    rm -rf "${STAGING_DIR}"
+    mkdir -p "${STAGING_DIR}"
+
+    # A missing source directory is not an error (other graphs, or other
+    # images, may bundle none); it simply leaves STAGING_DIR empty.
+    COPY_SCRIPT='[ -d "$1" ] || exit 0; for f in "$1"/*.txt; do [ -f "$f" ] && cp "$f" "$2"/; done; exit 0'
+    case "${RUNTIME}" in
+        docker)
+            docker run --rm \
+                -u "$(id -u):$(id -g)" \
+                -v "${OUTPUT_DIR}:${OUTPUT_DIR}" \
+                "${IMAGE_TAG}" \
+                sh -c "${COPY_SCRIPT}" sh "${ADDITIONAL_REFS_SRC}" "${STAGING_DIR}"
+            ;;
+        singularity | apptainer)
+            "${RUNTIME}" exec \
+                --bind "${OUTPUT_DIR}:${OUTPUT_DIR}" \
+                "${SIF_PATH}" \
+                sh -c "${COPY_SCRIPT}" sh "${ADDITIONAL_REFS_SRC}" "${STAGING_DIR}"
+            ;;
+    esac
+
+    # Signatures of what is already there, one "<signature><TAB><file>" per line.
+    SIGNATURES="${STAGING_DIR}.signatures"
+    : > "${SIGNATURES}"
+    for f in "${KNOWN_REFS_DIR}"/*.txt; do
+        [[ -f "${f}" ]] || continue
+        printf '%s\t%s\n' "$(spec_signature "${f}")" "$(basename "${f}")" >> "${SIGNATURES}"
+    done
+
+    MARKER_TMP="${ADDITIONAL_REFS_MARKER}.tmp"
+    {
+        echo "# Written by scripts/build_reference_hlala.sh on $(date -u '+%Y-%m-%dT%H:%M:%SZ')."
+        echo "# HLA-LA reference specifications copied into knownReferences/; delete this"
+        echo "# file and re-run the script to repeat the step."
+        printf 'image\t%s / %s\n' "${IMAGE_TAG}" "${SIF_PATH}"
+        printf 'source\t%s\n' "${ADDITIONAL_REFS_SRC}"
+    } > "${MARKER_TMP}"
+
+    N_INSTALLED=0
+    N_FOUND=0
+    for f in "${STAGING_DIR}"/*.txt; do
+        [[ -f "${f}" ]] || continue
+        N_FOUND=$(( N_FOUND + 1 ))
+        name="$(basename "${f}")"
+        sig="$(spec_signature "${f}")"
+        same="$(awk -F'\t' -v s="${sig}" '$1 == s { print $2; exit }' "${SIGNATURES}")"
+        if [[ -e "${KNOWN_REFS_DIR}/${name}" ]]; then
+            printf 'skipped-exists\t%s\n' "${name}" >> "${MARKER_TMP}"
+        elif [[ -n "${same}" ]]; then
+            echo "WARNING: not installing ${name}: it describes the same contigs as ${same}," >&2
+            echo "         already in knownReferences/, and HLA-LA refuses to run when two specs match." >&2
+            printf 'skipped-duplicate\t%s\tsame contigs as %s\n' "${name}" "${same}" >> "${MARKER_TMP}"
+        else
+            cp "${f}" "${KNOWN_REFS_DIR}/${name}"
+            printf '%s\t%s\n' "${sig}" "${name}" >> "${SIGNATURES}"
+            printf 'installed\t%s\n' "${name}" >> "${MARKER_TMP}"
+            N_INSTALLED=$(( N_INSTALLED + 1 ))
+        fi
+    done
+
+    rm -rf "${STAGING_DIR}" "${SIGNATURES}"
+
+    if (( N_FOUND == 0 )); then
+        echo "WARNING: the image bundles no reference specifications at ${ADDITIONAL_REFS_SRC}." >&2
+        echo "         Only the specs shipped with the graph package are available to HLA-LA." >&2
+    fi
+    # Written last, so an interrupted run leaves no marker and is simply repeated.
+    mv "${MARKER_TMP}" "${ADDITIONAL_REFS_MARKER}"
+    echo "Installed ${N_INSTALLED} of ${N_FOUND} bundled reference specification(s); details in"
+    echo "${ADDITIONAL_REFS_MARKER}."
 fi
 
 # --------------------------------------------------------------------------
