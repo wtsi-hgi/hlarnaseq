@@ -107,7 +107,7 @@ This builds and tags the Docker image as `quay.io/hlarnaseq/arcashla-genotype:0.
 
 ## WGS samplesheet input
 
-Optionally provide WGS BAM inputs with `--wgs_samples`:
+Optionally provide WGS BAM or CRAM inputs with `--wgs_samples`:
 
 ```bash
 --wgs_samples '[path to WGS samplesheet file]'
@@ -120,17 +120,17 @@ WGS_sample_id,WGS_BAM_path,WGS_BAI_path
 NA12878,testdata-make/hlarnases-testdata/wgs/NA12878.chr6_hla.GRCh38.bam,testdata-make/hlarnases-testdata/wgs/NA12878.chr6_hla.GRCh38.bam.bai
 ```
 
-| Column          | Description                                                                                                          |
-| --------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `WGS_sample_id` | WGS sample identifier. This entry is mandatory and cannot contain spaces.                                            |
-| `WGS_BAM_path`  | Path to the WGS BAM file. This entry is mandatory and must end in `.bam`.                                            |
-| `WGS_BAI_path`  | Path to the WGS BAI index. This entry is mandatory and must be named `<BAM file name>.bai` (i.e. end in `.bam.bai`). |
+| Column          | Description                                                                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WGS_sample_id` | WGS sample identifier. This entry is mandatory and cannot contain spaces.                                                                                      |
+| `WGS_BAM_path`  | Path to the WGS BAM or CRAM file. This entry is mandatory and must end in `.bam` or `.cram`.                                                                   |
+| `WGS_BAI_path`  | Path to its index. This entry is mandatory and must be named `<BAM file name>.bai` (ending in `.bam.bai`) or `<CRAM file name>.crai` (ending in `.cram.crai`). |
 
-Each row is validated and loaded as a separate WGS sample channel entry. Relative BAM and BAI paths are resolved from the directory containing the WGS samplesheet, the launch directory, or the pipeline project directory. An [example WGS samplesheet](../assets/wgs_samples.csv) has been provided with the pipeline.
+The column names keep their historical `BAM`/`BAI` spelling for CRAM rows too, and BAM and CRAM rows can be mixed in one samplesheet. Each row is validated and loaded as a separate WGS sample channel entry. Use absolute paths, or paths relative to the directory the pipeline is launched from; unlike the RNA samplesheet, relative WGS paths are currently not resolved against the samplesheet's own directory or the pipeline project directory. An [example WGS samplesheet](../assets/wgs_samples.csv) has been provided with the pipeline. To build one from a folder of `*.bam`/`*.cram` files, run `scripts/hlarnaseq_make_wgs_samplesheet <wgs_dir>`.
 
-The index must be named exactly `<BAM file name>.bai` (for example `NA12878.bam` + `NA12878.bam.bai`), not `<BAM base name>.bai`: HLA-LA resolves a BAM's index by appending `.bai` to the BAM path, and will not find an index named otherwise. This is enforced by [`assets/schema_wgs_samples.json`](../assets/schema_wgs_samples.json), so a mismatch fails at samplesheet validation rather than deep inside HLA-LA.
+The index must be named exactly `<alignment file name>.bai` or `.crai` (for example `NA12878.bam` + `NA12878.bam.bai`, or `NA12878.cram` + `NA12878.cram.crai`), not `<base name>.bai`: HLA-LA resolves the index by appending `.bai`/`.crai` to the alignment path, and will not find an index named otherwise. [`assets/schema_wgs_samples.json`](../assets/schema_wgs_samples.json) enforces the extensions, including that a `.cram` is paired with a `.cram.crai` and a `.bam` with a `.bam.bai`, so those mistakes fail at samplesheet validation rather than deep inside HLA-LA. It cannot check that the index name otherwise matches the alignment name.
 
-When `--wgs_samples` is provided, the pipeline runs HLA-LA once per WGS BAM and combines the reported G-group allele calls into `hlala/HLA-LA_combined.tsv`.
+When `--wgs_samples` is provided, the pipeline runs HLA-LA once per WGS BAM/CRAM and combines the reported G-group allele calls into `hlala/HLA-LA_combined.tsv`.
 HLA-LA itself (and the samtools/bwa/picard tooling it shells out to) is provisioned by the `HLALA_TYPING` module's own `environment.yml`/`conda` directive and matching pinned `container` (`hla-la=1.0.4`), resolved automatically by Nextflow under `-profile conda`/`docker`/`singularity`/`apptainer`. The image is public, so nothing has to be built locally for it - only the graph below is prepared out of band.
 
 The prepared HLA-LA **graph**, however, remains a required, separately-prepared input: the pipeline never downloads, builds, or packages HLA-LA graph data (the `hlala/preparegraph` step is deliberately not wired in), the same pattern as `--arcashla_reference_dir` for arcasHLA above.
@@ -145,6 +145,18 @@ nextflow run wtsi-hgi/hlarnaseq \
     --outdir ./results
 ```
 
+### CRAM input and the reference genome
+
+Reading a CRAM requires the reference genome it was compressed against. The pipeline does **not** take a reference FASTA for this and passes none to HLA-LA: samtools inside the `HLALA_TYPING` container finds the reference through the standard htslib `REF_PATH`/`REF_CACHE` environment variables of the environment the pipeline is launched from. For example, on the Sanger farm these are set by default, LSF copies them into each job, and the `sanger` profile mounts `/lustre`, `/nfs`, `/data` and `/software` into the container.
+
+Elsewhere, make sure that:
+
+- `REF_PATH` (and `REF_CACHE`, if used) are set where the tasks run;
+- the directories they point to are visible inside the container (add bind mounts if they are outside the paths your profile mounts);
+- under `-profile docker`, the variables are forwarded into the container (for example with `docker.envWhitelist = 'REF_PATH,REF_CACHE'` in a custom config), since Docker does not pass the host environment through.
+
+Without a usable local reference, samtools falls back to downloading the reference sequences from the EBI reference server named in the CRAM header, which is slow and fails on compute nodes without network access.
+
 ### Preparing the HLA-LA graph
 
 Prepare the graph once, out of band, with:
@@ -158,6 +170,8 @@ This downloads the published PRG graph package (`PRG_MHC_GRCh38_withIMGT`, ~2.25
 1. `HLA-LA --action prepareGraph`, which produces `serializedGRAPH`; and
 2. `bwa index` over `extendedReferenceGenome/extendedReferenceGenome.fa`.
 
+It then installs the reference specifications HLA-LA bundles for the graph into the graph's `knownReferences/` (see [Which input reference genomes HLA-LA accepts](#which-input-reference-genomes-hla-la-accepts) below).
+
 Unlike arcasHLA's image, this one is public (Biocontainers/Galaxy depot), so there is no companion image-build script: the container is pulled on first use. Docker is used when its daemon is reachable, otherwise Singularity/Apptainer. That image already ships the `bwa` step 2 needs, so nothing extra has to be installed.
 
 **Step 2 is not optional, even though `prepareGraph` does not do it.** The published tarball ships `mapping_PRGonly/referenceGenome.fa` pre-indexed but `extendedReferenceGenome/` with the FASTA alone, and HLA-LA copes by building that bwa index lazily, the first time it maps reads against the extended reference genome - writing it back into the graph directory, next to the FASTA. The pipeline hands `HLALA_TYPING` one shared graph directory for every WGS sample, so with an unindexed graph all the concurrent per-sample tasks find the index missing, all launch the same `bwa index` against the same paths, and they overwrite each other's partial output: all but (at most) one sample fails, hours into the run. Building the index once, up front, removes the race. The pipeline also refuses to start a `--wgs_samples` run against a graph that lacks it, naming this script in the error, rather than letting the race happen.
@@ -167,9 +181,9 @@ Budget for it before starting:
 - **~29 GB on disk** for the extracted and fully indexed graph (`serializedGRAPH` alone is ~5.5 GB, and the bwa index adds ~5.1 GB on top of the 3 GB extended reference FASTA), plus the 2.25 GB tarball. The script checks free space on the target filesystem up front (override the floor with `REQUIRED_GB`) rather than failing hours in.
 - **A few hours** for `prepareGraph`, and per HLA-LA's own README it "might take up to 40G of memory". The script warns if the machine has less than 40 GB of RAM but still proceeds. `bwa index` adds roughly another hour and is not memory-hungry.
 
-Re-running the script is free: if the graph is already fully indexed - `<output-dir>/<graph>/serializedGRAPH` non-empty **and** the extended reference FASTA's `.sa`/`.ann`/`.bwt` all present - it reports the graph as already built and exits without downloading, extracting, or indexing anything, and that check runs _before_ the download.
+Re-running the script is free: if the graph is already fully prepared - `<output-dir>/<graph>/serializedGRAPH` non-empty, the extended reference FASTA's `.sa`/`.ann`/`.bwt` all present, **and** the additional reference specifications installed (recorded in `<output-dir>/<graph>/.hlarnaseq_additional_references`) - it reports the graph as already built and exits without downloading, extracting, or indexing anything, and that check runs _before_ the download.
 
-Each indexing step is skipped independently when its own output is already in place, so **a graph prepared before this pipeline built the bwa index is repaired by simply re-running the script on the same directory**: it adds the missing index and neither re-downloads the package nor re-runs the multi-hour `prepareGraph`. An interrupted run that already extracted the package likewise resumes at indexing instead of re-downloading.
+Each step is skipped independently when its own output is already in place, so **a graph prepared before this pipeline built the bwa index, or before it installed the additional reference specifications, is repaired by simply re-running the script on the same directory**: it adds only what is missing and neither re-downloads the package nor re-runs the multi-hour `prepareGraph`. An interrupted run that already extracted the package likewise resumes at indexing instead of re-downloading.
 
 **To force a full rebuild, delete the graph directory and re-run**; that is deliberately the only supported way, so there is no "force" flag that could half-overwrite an existing graph. `GRAPH_NAME`, `GRAPH_URL`, `GRAPH_MD5`, `TARBALL` (use an already-downloaded copy), `IMAGE_TAG`, `SIF_PATH`, and `REQUIRED_GB` are all overridable - see `scripts/build_reference_hlala.sh --help`.
 
@@ -178,6 +192,20 @@ On success the script prints the exact parameters to pass:
 ```bash
 --hlala_graph_dir /path/to/HLA-LA/graphs --hlala_graph PRG_MHC_GRCh38_withIMGT
 ```
+
+#### Which input reference genomes HLA-LA accepts
+
+HLA-LA only types a WGS BAM/CRAM whose reference genome it recognises. It reads the input's contigs with `samtools idxstats` and needs **exactly one** `*.txt` file in the graph's `knownReferences/` whose contig names and lengths (including the `*` line for unmapped reads) match the input **exactly** - a file listing more contigs than the input does not count. With no match the task fails with
+
+```
+Have found no compatible reference specifications in .../PRG_MHC_GRCh38_withIMGT//knownReferences - create a file for this BAM file and try again.
+```
+
+and with more than one it fails with `Found more than one compatible reference file`.
+
+The published graph package ships only four such files (1000 Genomes GRCh38 with ALT/decoy/HLA contigs, two B37 variants, and the graph's own). HLA-LA itself bundles more - for this graph, 16 under `additionalReferences/PRG_MHC_GRCh38_withIMGT/` in its install, covering e.g. the **GRCh38 no-alt analysis set + EBV** (`Illumina_B38.txt`, which also matches Sanger's `GRCh38_15` alignments), GEL B38, GRCh38.p12, hg19 and B37 with `chr` names - but it only reads them when called with `--graph`, which the nf-core `HLALA_TYPING` module never passes. `scripts/build_reference_hlala.sh` therefore copies them from the pinned image into `knownReferences/`. It never overwrites a file already there, and skips any bundled file whose contig set duplicates one already present (with a warning), so it cannot create the "more than one compatible" failure. **If a graph was prepared before this step existed, re-run the script on it** - it adds only these files.
+
+If your inputs use a reference none of these describe, add a file for it yourself to `<hlala_graph_dir>/<hlala_graph>/knownReferences/`. It is tab-separated, with the header columns `contigID`, `contigLength`, `ExtractCompleteContig`, `PartialExtraction_Start` and `PartialExtraction_Stop`, and one row per line of `samtools idxstats <input>` - same contig names and lengths, nothing more or less, including the `*` row (length `0`, `ExtractCompleteContig` `1`, so unmapped reads are extracted too). The MHC contig's row carries the region to extract in the last two columns (`28510120` and `33480577` on GRCh38 `chr6`); every other row has `0` and empty coordinates. `Illumina_B38.txt` (installed by the script) is a good template for a GRCh38 build.
 
 **Limitation: the script fetches and indexes a _published_ graph; it cannot construct one from scratch.** This is not an unfinished feature - building a PRG graph for a newer IMGT/HLA release or for custom loci is not scriptable outside the tool author's own environment. HLA-LA's own `src/Update graphs.txt` documents that workflow as Perl scripts run on the author's Windows laptop, plus the separate older MHC-PRG v1 binary (not shipped in the bioconda `hla-la` package), hardcoded cluster paths, and input files that were never distributed. A newer graph is an upstream request to the HLA-LA authors. The `GRAPH_NAME`/`GRAPH_URL`/`GRAPH_MD5` overrides exist so other _published_ graph packages, an offline mirror, or a future move of the download host work without editing the script.
 

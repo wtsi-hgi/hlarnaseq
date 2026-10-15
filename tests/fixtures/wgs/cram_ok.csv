@@ -1,0 +1,3 @@
+WGS_sample_id,WGS_BAM_path,WGS_BAI_path
+WGS_CRAM,tests/fixtures/wgs/WGS_CRAM.cram,tests/fixtures/wgs/WGS_CRAM.cram.crai
+WGS_BAM,tests/fixtures/wgs/WGS_BAM.bam,tests/fixtures/wgs/WGS_BAM.bam.bai

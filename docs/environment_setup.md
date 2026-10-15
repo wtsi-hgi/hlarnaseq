@@ -77,7 +77,10 @@ runs, and neither is created by the pipeline:
   `HLA-LA --action prepareGraph` and `bwa index` over the graph's
   `extendedReferenceGenome.fa` — the latter because HLA-LA would otherwise build
   it inside every concurrent `HLALA_TYPING` task, all writing to the same shared
-  files. See [usage docs](usage.md#preparing-the-hla-la-graph).
+  files. It also copies HLA-LA's bundled reference specifications into the
+  graph's `knownReferences/`, so BAM/CRAMs aligned to e.g. the GRCh38 no-alt
+  analysis set (Sanger `GRCh38_15`) are recognised; re-run it on an older graph
+  to add them. See [usage docs](usage.md#preparing-the-hla-la-graph).
 - Both are idempotent and document their override variables under `--help`.
 
 `--hibag_model` (SNP-array path) and, under `-profile conda` only, `--hlapm_repo`

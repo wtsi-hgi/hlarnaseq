@@ -105,6 +105,7 @@ fi
 
 hlarnaseq \
     -work-dir "${NEXTFLOW_WORKDIR}" \
+    -config conf/resources.config \
     -resume \
     --gtf "$GTF_PATCHED" \
     --arcashla_reference_dir "$ARCASHLA_REF" \
