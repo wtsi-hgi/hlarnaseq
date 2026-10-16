@@ -1,0 +1,128 @@
+nextflow_process {
+
+    name "Test Process ARCASHLA_EXTRACT"
+    script "../main.nf"
+    process "ARCASHLA_EXTRACT"
+    tag "modules"
+    tag "modules_local"
+    tag "arcashla_extract"
+
+    // Real (unstubbed) runs against the fixture RNA BAM, whose header has a
+    // single `@SQ SN:chr6` and which carries 2 primary alignments inside
+    // chr6:28500000-33400000 and none in chr6:1-1000.
+
+    test("extracts MHC reads when --hla_region matches the BAM's contig naming") {
+
+        config "./nextflow.config"
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                hla_region = 'chr6:28500000-33400000'
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.Aligned.sortedByCoord.out.bam", checkIfExists: true),
+                        file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.Aligned.sortedByCoord.out.bam.bai", checkIfExists: true),
+                        [
+                            file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.unmapped_1.fastq.gz", checkIfExists: true),
+                            file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.unmapped_2.fastq.gz", checkIfExists: true)
+                        ]
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assert path(process.out.bam[0][1]).exists()
+            assert file(process.out.bam[0][1]).size() > 0
+            assert path(process.out.reads[0][1]).exists()
+            assert path(process.out.reads[0][2]).exists()
+            assert file(process.out.versions[0]).exists()
+        }
+    }
+
+    test("fails with exit 3 and a chr-naming hint when --hla_region uses 6 but the BAM uses chr6") {
+
+        config "./nextflow.config"
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                hla_region = '6:28500000-33400000'
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.Aligned.sortedByCoord.out.bam", checkIfExists: true),
+                        file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.Aligned.sortedByCoord.out.bam.bai", checkIfExists: true),
+                        [
+                            file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.unmapped_1.fastq.gz", checkIfExists: true),
+                            file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.unmapped_2.fastq.gz", checkIfExists: true)
+                        ]
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.failed
+
+            // process.exitStatus is the Nextflow run's own status (always 1
+            // on a task failure), so the task's exit status is read from
+            // the error report instead.
+            // 3, not 127: samtools was provisioned, the region was wrong.
+            def stderr = process.errorReport ?: ''
+            assert stderr =~ /Command exit status:\s+3\b/
+            assert stderr.contains("contig '6' is not an @SQ reference")
+            assert stderr.contains("The BAM uses 'chr6' instead")
+            assert stderr.contains('--hla_region chr6:28500000-33400000')
+        }
+    }
+
+    test("fails with exit 4 when the contig exists but the region holds no reads") {
+
+        config "./nextflow.config"
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                hla_region = 'chr6:1-1000'
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        [ id: 'RNA_SAMPLE_1' ],
+                        file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.Aligned.sortedByCoord.out.bam", checkIfExists: true),
+                        file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.Aligned.sortedByCoord.out.bam.bai", checkIfExists: true),
+                        [
+                            file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.unmapped_1.fastq.gz", checkIfExists: true),
+                            file("\${projectDir}/tests/fixtures/rnaseq/RNA_SAMPLE_1.unmapped_2.fastq.gz", checkIfExists: true)
+                        ]
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.failed
+
+            // process.exitStatus is the Nextflow run's own status (always 1
+            // on a task failure), so the task's exit status is read from
+            // the error report instead.
+            def stderr = process.errorReport ?: ''
+            assert stderr =~ /Command exit status:\s+4\b/
+            assert stderr.contains('no primary alignments in --hla_region chr6:1-1000')
+        }
+    }
+}

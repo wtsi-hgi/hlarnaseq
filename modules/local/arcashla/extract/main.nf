@@ -45,6 +45,51 @@ process ARCASHLA_EXTRACT {
         ln -sf "${bai}" "${bam}.bai"
     fi
 
+    # Contig-naming pre-check (exit 3). samtools view does not reliably fail on
+    # a region whose contig is absent from the BAM (it warns "unknown
+    # reference ... Continue anyway" and exits 0), so a "chr6" vs "6" mismatch
+    # between --hla_region and the BAM would otherwise surface far downstream,
+    # if at all. The contig is everything before the last ':' - the same split
+    # bin/check_gtf_hla_gene_ids.py's parse_region() uses. Pure bash on purpose:
+    # nothing beyond samtools and bash is assumed of the container.
+    hla_region="${params.hla_region}"
+    hla_contig="\${hla_region%:*}"
+    case "\${hla_contig}" in
+        chrM) alt_contig="MT" ;;
+        MT)   alt_contig="chrM" ;;
+        chr*) alt_contig="\${hla_contig#chr}" ;;
+        *)    alt_contig="chr\${hla_contig}" ;;
+    esac
+
+    bam_header="\$(samtools view -H "${bam}")"
+    sq_names=()
+    while IFS= read -r header_line; do
+        [[ "\${header_line}" == @SQ* ]] || continue
+        IFS=\$'\\t' read -r -a header_fields <<< "\${header_line}"
+        for header_field in "\${header_fields[@]}"; do
+            if [[ "\${header_field}" == SN:* ]]; then
+                sq_names+=("\${header_field#SN:}")
+            fi
+        done
+    done <<< "\${bam_header}"
+
+    has_contig=0
+    has_alt_contig=0
+    for sq_name in "\${sq_names[@]+"\${sq_names[@]}"}"; do
+        if [[ "\${sq_name}" == "\${hla_contig}" ]]; then has_contig=1; fi
+        if [[ "\${sq_name}" == "\${alt_contig}" ]]; then has_alt_contig=1; fi
+    done
+
+    if [[ \${has_contig} -eq 0 ]]; then
+        echo "ERROR: --hla_region contig '\${hla_contig}' is not an @SQ reference in ${bam}." >&2
+        if [[ \${has_alt_contig} -eq 1 ]]; then
+            echo "       The BAM uses '\${alt_contig}' instead; use --hla_region \${alt_contig}\${hla_region:\${#hla_contig}} (and make sure --gtf uses the same contig naming)." >&2
+        else
+            echo "       First @SQ names in the BAM: \${sq_names[*]:0:5}" >&2
+        fi
+        exit 3
+    fi
+
     samtools view \
         --uncompressed \
         --fetch-pairs \
@@ -58,6 +103,17 @@ process ARCASHLA_EXTRACT {
             -T "${meta.id}.sort" \
             -o "${meta.id}.mhc.namesort.bam" \
             -
+
+    # Empty-extraction check (exit 4). The contig exists, so zero primary
+    # alignments in the slice means wrong coordinates for this BAM's build
+    # (e.g. GRCh38 coordinates on a GRCh37 BAM); without this, arcasHLA fails
+    # later with a far less specific error.
+    n_extracted="\$(samtools view -c "${meta.id}.mhc.namesort.bam")"
+    if [[ "\${n_extracted}" -eq 0 ]]; then
+        echo "ERROR: no primary alignments in --hla_region ${params.hla_region} of ${bam}." >&2
+        echo "       The contig exists, so the coordinates probably do not match this BAM's genome build." >&2
+        exit 4
+    fi
 
     samtools fastq \
         -@ ${task.cpus} \

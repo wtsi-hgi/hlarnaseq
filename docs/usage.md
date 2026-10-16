@@ -62,6 +62,20 @@ All columns are mandatory and each `rna_id` may occur only once. Relative file p
 
 `--hla_region` is passed unchanged to samtools. The user must choose coordinates and chromosome notation that match every BAM header: the pipeline does not translate `6` to `chr6`, or vice versa.
 
+### Contig naming checks
+
+`--hla_region`, the `@SQ` headers of every RNA BAM, and column 1 of `--gtf` must all use the same contig naming. Because samtools silently extracts nothing from a region whose contig is not in the BAM, the pipeline checks this itself and stops with a message naming the contig:
+
+| Check                                                                                                                                                                                   | Process                 | Exit status |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ----------- |
+| The `--hla_region` contig is not an `@SQ` reference in a sample's BAM. If the BAM has the other form (`6` <-> `chr6`, `MT` <-> `chrM`), the message gives the corrected `--hla_region`. | `ARCASHLA_EXTRACT`      | `3`         |
+| The contig exists but the region holds no primary alignments - usually coordinates from the wrong genome build (e.g. GRCh38 coordinates on a GRCh37 BAM).                               | `ARCASHLA_EXTRACT`      | `4`         |
+| No `--gtf` gene overlaps `--hla_region` **and** the GTF uses the other form of the contig.                                                                                              | `GTF_HLA_GENE_ID_CHECK` | `3`         |
+
+A GTF with neither form of the contig (such as `-profile test`'s `placeholder.gtf`) only gets a [warning](#gtf-hla-gene-id-uniqueness-check). Contig names other than `chrN`/`N` and `chrM`/`MT` (for example RefSeq `NC_000006.12`) still fail the BAM check, but without a suggested fix; the message lists the first `@SQ` names instead.
+
+For BAMs aligned to an Ensembl-style (no-`chr`) reference, use `--hla_region 6:28500000-33400000` and a GTF with the same naming - for example GENCODE with the `chr` prefix stripped from column 1 and `chrM` renamed to `MT`.
+
 For each sample, the pipeline extracts complete pairs overlapping this region, excludes secondary and supplementary alignments, and combines the recovered mates with the supplied FASTQs. An [example RNA samplesheet](../assets/rna_samples.csv) is included.
 
 Each extracted read pair is checked with [validatefastq](https://github.com/biopet/validatefastq) before it is made available to downstream arcasHLA steps. A non-zero validator exit status or a reported `ERROR` stops the pipeline; the pipeline does not attempt to repair, reorder, or skip invalid pairs. Successful per-sample validation logs are written beneath `arcashla/validation/`.
@@ -502,7 +516,7 @@ For each in-scope gene name, **distinct `gene_id`s are counted across the whole 
 
 Because scope definition 1 is keyed off `--hla_region`, narrowing `--hla_region` narrows what is checked. That is deliberate - it keeps the check aligned with the region the pipeline actually analyses - but it does mean the two parameters have to be chosen together.
 
-A GTF with **no** gene overlapping `--hla_region` is a non-fatal warning, not a failure: `-profile test`'s tiny `placeholder.gtf` legitimately has none. On a real whole-genome GTF that warning almost always means a contig-notation mismatch (`chr6` vs `6`) between `--hla_region` and the GTF, and is worth acting on.
+A GTF with **no** gene overlapping `--hla_region` is a non-fatal warning, not a failure: `-profile test`'s tiny `placeholder.gtf` legitimately has none. The exception is a GTF that uses the other naming of the region's contig (`6` for a `chr6` region, or vice versa): that is certainly a naming mismatch, and the check fails with exit status `3` (see [Contig naming checks](#contig-naming-checks)). On a real whole-genome GTF the remaining warning still almost always means the contig naming is wrong, and is worth acting on.
 
 ### The failure message
 

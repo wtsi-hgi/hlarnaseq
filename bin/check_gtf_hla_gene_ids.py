@@ -50,6 +50,9 @@ Exit status
 1  at least one offender (every offending pair is printed to stderr; a failed
    Nextflow task publishes nothing, so stderr is the user's only copy)
 2  --hla-region could not be parsed
+3  no gene row overlaps --hla-region AND the GTF uses the other contig naming
+   for it ("6" for a "chr6" region, or vice versa; "MT" <-> "chrM") - a
+   certain chr/no-chr naming mismatch. A GTF with neither form only warns.
 """
 
 import argparse
@@ -149,12 +152,30 @@ def open_maybe_gzip(path, mode="rt"):
     return gzip.open(path, mode) if path.endswith(".gz") else open(path, mode)
 
 
+def toggled_contig(contig):
+    """
+    The other common naming of `contig`: "chr6" <-> "6", "chrM" <-> "MT".
+
+    Mirrors the hint ARCASHLA_EXTRACT gives for the same mismatch in a BAM
+    header.
+    """
+    if contig == "chrM":
+        return "MT"
+    if contig == "MT":
+        return "chrM"
+    if contig.startswith("chr"):
+        return contig[len("chr") :]
+    return "chr" + contig
+
+
 def scan_gtf(gtf_path, contig, start, end, hla_gene_prefix):
     """
     Single streaming pass over --gtf, feature_type == "gene" rows only.
 
     Returns (name_to_ids, id_to_names, in_region_names, prefixed_names,
-    n_region_gene_rows). The first four are insertion-ordered dicts used as
+    n_region_gene_rows, contigs). `contigs` is the set of column-1 values of
+    every non-comment row, used to diagnose a chr/no-chr naming mismatch.
+    The first four are insertion-ordered dicts used as
     ordered sets, so every reported id list is in first-appearance-in-file
     order (matching load_gene_name_to_ids()) and therefore reproducible.
     """
@@ -163,6 +184,7 @@ def scan_gtf(gtf_path, contig, start, end, hla_gene_prefix):
     in_region_names = {}
     prefixed_names = {}
     n_region_gene_rows = 0
+    contigs = set()
 
     with open_maybe_gzip(gtf_path, "rt") as handle:
         for line in handle:
@@ -172,6 +194,8 @@ def scan_gtf(gtf_path, contig, start, end, hla_gene_prefix):
             fields = line.rstrip("\n").split("\t")
             if len(fields) < 9:
                 continue
+
+            contigs.add(fields[0])
 
             if fields[2] != "gene":
                 continue
@@ -203,7 +227,7 @@ def scan_gtf(gtf_path, contig, start, end, hla_gene_prefix):
                 in_region_names[gene_name] = None
                 n_region_gene_rows += 1
 
-    return name_to_ids, id_to_names, in_region_names, prefixed_names, n_region_gene_rows
+    return name_to_ids, id_to_names, in_region_names, prefixed_names, n_region_gene_rows, contigs
 
 
 def build_report_rows(name_to_ids, id_to_names, in_region_names, prefixed_names):
@@ -378,7 +402,23 @@ def main(argv=None):
         in_region_names,
         prefixed_names,
         n_region_gene_rows,
+        gtf_contigs,
     ) = scan_gtf(args.gtf, contig, start, end, args.hla_gene_prefix)
+
+    alt_contig = toggled_contig(contig)
+    if n_region_gene_rows == 0 and contig not in gtf_contigs and alt_contig in gtf_contigs:
+        # Unlike the warning below, this is certainly a naming mismatch: the
+        # GTF annotates the MHC contig, just under the other name.
+        suggested_region = alt_contig + args.hla_region.strip()[len(contig) :]
+        print(
+            f"ERROR: --hla-region contig {contig!r} does not appear in {args.gtf}, "
+            f"which uses {alt_contig!r} instead. --hla_region, the RNA BAM headers "
+            "and --gtf must all use the same contig naming: either use "
+            f"--hla_region {suggested_region} with matching BAMs, or supply a GTF "
+            f"whose contigs are named like {contig!r}.",
+            file=sys.stderr,
+        )
+        return 3
 
     if n_region_gene_rows == 0:
         # Non-fatal: -profile test's tiny placeholder.gtf legitimately has no

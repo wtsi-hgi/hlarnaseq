@@ -9,6 +9,7 @@ Initial release of wtsi-hgi/hlarnaseq, created with the [nf-core](https://nf-co.
 
 ### `Added`
 
+- Added early contig-naming checks. `ARCASHLA_EXTRACT` now fails with exit status `3` when the `--hla_region` contig is not in a BAM's `@SQ` header, suggesting the corrected region when the BAM uses the other `chr`/no-`chr` form. It fails with exit status `4` when the region holds no primary alignments, which usually means coordinates from the wrong genome build. `GTF_HLA_GENE_ID_CHECK` now fails with exit status `3`, instead of warning, when no `--gtf` gene overlaps `--hla_region` and the GTF uses the other naming of the region's contig. See `docs/usage.md#contig-naming-checks`.
 - Added required `--rna_samples` and `--hla_region` inputs and extraction of arcasHLA-ready paired MHC FASTQs with samtools.
 - Added per-sample validatefastq pairing validation for extracted arcasHLA reads, with validation logs under `arcashla/validation/`.
 - Added an `ARCASHLA_GENOTYPE` step that runs `arcasHLA genotype` on validated RNA reads (configurable via `--arcashla_genes`), writing per-sample results under `arcashla/genotype/`. Genotyping runs inside a dedicated, operator-prepared `arcas-hla` Conda environment.

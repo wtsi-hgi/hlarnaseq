@@ -121,6 +121,39 @@ nextflow_process {
         }
     }
 
+    test("rejects a GTF that names the --hla_region contig the other way (chr6 vs 6)") {
+
+        when {
+            params {
+                outdir     = "$outputDir"
+                hla_region = 'chr6:28500000-33400000'
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    file("${projectDir}/tests/fixtures/gtf_hla_gene_id_check/mhc_nochr.gtf", checkIfExists: true)
+                )
+                """
+            }
+        }
+
+        then {
+            // The GTF annotates the MHC on contig "6", so zero genes overlap
+            // chr6:... - certainly a naming mismatch, not the placeholder.gtf
+            // warning path below.
+            assert process.failed
+
+            // process.exitStatus is the Nextflow run's own status (always 1
+            // on a task failure), so the task's exit status is read from
+            // the error report instead.
+            def stderr = process.errorReport ?: ''
+            assert stderr =~ /Command exit status:\s+3\b/
+            assert stderr.contains("contig 'chr6' does not appear in")
+            assert stderr.contains("uses '6' instead")
+            assert stderr.contains('--hla_region 6:28500000-33400000')
+        }
+    }
+
     test("accepts a GTF with no HLA-region annotation at all, with a non-fatal warning") {
 
         when {
