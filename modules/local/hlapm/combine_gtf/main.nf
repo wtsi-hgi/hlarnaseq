@@ -22,10 +22,22 @@ process HLAPM_COMBINE_GTF {
     path "versions.yml", emit: versions
 
     script:
+    // A single-file input can arrive unwrapped rather than as a list. Sorted
+    // by name for a deterministic concatenation order, independent of the
+    // order collect() delivered. Joined onto one line: a multi-line
+    // interpolated value would break the script block's common-indentation
+    // stripping (see HLALA_COMBINE).
+    def gtf_list = (gtfs instanceof List ? gtfs : [gtfs]).sort { it.getName() }
+    def gtf_args = gtf_list.collect { "\"${it}\"" }.join(' ')
     """
     set -euo pipefail
 
-    cat *.gtf | grep -v '^#' > combined.gtf
+    # Concatenate exactly the staged inputs. Never glob *.gtf here: the output
+    # combined.gtf matches that glob, and because both sides of the pipeline
+    # start concurrently the redirect can create it before the glob expands,
+    # so cat reads its own growing output forever (seen on Lustre: a 4.1 TB
+    # combined.gtf killed at the 8 h LSF runlimit).
+    cat ${gtf_args} | grep -v '^#' > combined.gtf
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
