@@ -43,6 +43,7 @@ NEXTFLOW_WORKDIR="${NEXTFLOW_WORKDIR:-${RUN_DIR}/nextflow.workdir}"
 NEXTFLOW_LOG="${NEXTFLOW_LOG:-${RUN_DIR}/testdata.log}"
 RNA_SAMPLESHEET="${RNA_SAMPLESHEET:-${ROOT_DIR}/assets/rna_samples.csv}"
 WGS_SAMPLESHEET="${WGS_SAMPLESHEET:-${ROOT_DIR}/assets/wgs_samples.csv}"
+WGS_REFERENCE="${WGS_REFERENCE:-${ROOT_DIR}/testdata-make/hlarnases-testdata/reference/GRCh38.primary_assembly.genome.fa}"
 ARRAY_SAMPLESHEET="${ARRAY_SAMPLESHEET:-${ROOT_DIR}/assets/array_samples.csv}"
 RNA_WGS_KEY="${RNA_WGS_KEY:-${ROOT_DIR}/assets/rna_wgs_key.csv}"
 ARCASHLA_REF="${ROOT_DIR}/testdata-make/hlarnases-testdata/arcashla-ref"
@@ -113,9 +114,9 @@ nextflow -log "${NEXTFLOW_LOG}" \
     --arcashla_reference_dir "$ARCASHLA_REF" \
     --rna_samples "${RNA_SAMPLESHEET}" \
     --hla_region "${HLA_REGION}" \
-    --array_samples "${ARRAY_SAMPLESHEET}" \
-    --hibag_model "${HIBAG_MODEL}" \
-    --hibag_match_type "${HIBAG_MATCH_TYPE}" \
+    --wgs_samples "${WGS_SAMPLESHEET}" \
+    --hlala_graph_dir "$HLALA_GRAPHS"  \
+    --wgs_reference "$WGS_REFERENCE"  \
     --sample_key "$RNA_WGS_KEY" \
     --outdir "${OUTDIR}" \
     "$@"
@@ -134,6 +135,7 @@ nextflow -log "${NEXTFLOW_LOG}" \
 #
 #     --wgs_samples "${WGS_SAMPLESHEET}" \
 #     --hlala_graph_dir "$HLALA_GRAPHS"  \
+#     --wgs_reference "$WGS_REFERENCE"  \
 
 #    --array_samples "${ARRAY_SAMPLESHEET}" \
 #    --hibag_model "${HIBAG_MODEL}" \

@@ -9,8 +9,8 @@ nextflow_pipeline {
     // assets/schema_wgs_samples.json rejects a mismatched pair. The fixtures
     // are empty files: run in stub form, nothing reads them, so these tests
     // cover samplesheet validation and channel wiring only - not whether
-    // HLA-LA's samtools can decode a real CRAM (that relies on REF_PATH, see
-    // docs/usage.md "CRAM input and the reference genome").
+    // HLA-LA's samtools can decode a real CRAM (that relies on --wgs_reference
+    // or REF_PATH, see docs/usage.md "CRAM input and the reference genome").
     test("BAM and CRAM rows are accepted and reach HLALA_TYPING") {
 
         options "-stub-run"
@@ -42,6 +42,91 @@ nextflow_pipeline {
                 { assert typing.any { it.name.contains('(WGS_CRAM)') } },
                 { assert typing.any { it.name.contains('(WGS_BAM)') } },
                 { assert new File("$outputDir/hlala/HLA-LA_combined.tsv").readLines()[0] == 'sample_id\tLocus\tHLA_allele' }
+            )
+        }
+    }
+
+    // --wgs_reference: the tiny ref.fa/ref.fa.fai fixtures stand in for a
+    // genome FASTA. In stub form HLA-LA never runs, so this proves the
+    // parameter validates and the reference channel wires into
+    // HLALA_TYPING's second input - not that `--samtools_T` takes effect.
+    test("CRAM sheet with --wgs_reference reaches HLALA_TYPING") {
+
+        options "-stub-run"
+
+        when {
+            params {
+                def fixtures = "$projectDir/tests/fixtures/wgs"
+                def sheet    = new File("$outputDir/cram_ok.csv")
+                sheet.parentFile.mkdirs()
+                sheet.text = new File("$fixtures/cram_ok.csv").text.replace('tests/fixtures/wgs', fixtures)
+
+                outdir          = "$outputDir"
+                wgs_samples     = sheet.path
+                hlala_graph_dir = "$fixtures/hlala_graph"
+                wgs_reference   = "$fixtures/ref.fa"
+            }
+        }
+
+        then {
+            def typing = workflow.trace.tasks().findAll { it.name.contains('HLALA_TYPING') }
+            assertAll(
+                { assert workflow.success },
+                { assert typing.size() == 2 },
+                { assert typing.any { it.name.contains('(WGS_CRAM)') } }
+            )
+        }
+    }
+
+    test("reject --wgs_reference without a .fai index") {
+
+        options "-stub-run"
+
+        when {
+            params {
+                // Written per test so the fixture directory never holds an
+                // unindexed FASTA next to the indexed one.
+                def fasta = new File("$outputDir/unindexed.fa")
+                fasta.parentFile.mkdirs()
+                fasta.text = ">chr6\nACGTACGTAC\n"
+
+                outdir          = "$outputDir"
+                wgs_samples     = "$projectDir/tests/fixtures/wgs_samples_stub.csv"
+                hlala_graph_dir = "$projectDir/tests/fixtures/wgs/hlala_graph"
+                wgs_reference   = fasta.path
+            }
+        }
+
+        then {
+            assertAll(
+                { assert workflow.failed },
+                { assert workflow.stdout.any { it.contains('reference FASTA is not indexed') } ||
+                         workflow.stderr.any { it.contains('reference FASTA is not indexed') } }
+            )
+        }
+    }
+
+    test("reject --wgs_reference that is not a FASTA") {
+
+        options "-stub-run"
+
+        when {
+            params {
+                def notfasta = new File("$outputDir/ref.txt")
+                notfasta.parentFile.mkdirs()
+                notfasta.text = ">chr6\nACGTACGTAC\n"
+
+                outdir          = "$outputDir"
+                wgs_samples     = "$projectDir/tests/fixtures/wgs_samples_stub.csv"
+                hlala_graph_dir = "$projectDir/tests/fixtures/wgs/hlala_graph"
+                wgs_reference   = notfasta.path
+            }
+        }
+
+        then {
+            assertAll(
+                { assert workflow.failed },
+                { assert workflow.stderr.any { it.contains('--wgs_reference') && it.contains('does not match regular expression') } }
             )
         }
     }

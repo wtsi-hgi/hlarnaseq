@@ -23,7 +23,28 @@ workflow HLALA {
     // to form the module's `tuple val(meta), path(bam), path(bai), path(graph)`.
     ch_typing_input = ch_wgs_samplesheet.combine(ch_graph)
 
-    HLALA_TYPING(ch_typing_input)
+    // Optional --wgs_reference: the FASTA the WGS CRAMs were compressed
+    // against, handed to HLA-LA as `--samtools_T` so every `samtools view` it
+    // runs on the input decodes CRAM against a staged local file rather than
+    // via REF_PATH/REF_CACHE (whose default falls back to fetching sequences
+    // from the EBI CRAM reference server). Its index (.fai, plus .gzi for a
+    // bgzipped FASTA) is staged alongside so htslib finds it by name instead
+    // of re-indexing the genome in every task; utils_wtsihgi_hlarnaseq_pipeline
+    // has already checked both exist. Without the parameter the module gets
+    // the empty `[[:], [], []]` tuple, its `fasta` input is empty, and no
+    // `--samtools_T` is added - i.e. the previous REF_PATH behaviour.
+    if (params.wgs_reference) {
+        def fasta       = file(params.wgs_reference, checkIfExists: true)
+        def fasta_index = [file("${params.wgs_reference}.fai", checkIfExists: true)]
+        if (fasta.name.endsWith('.gz')) {
+            fasta_index << file("${params.wgs_reference}.gzi", checkIfExists: true)
+        }
+        ch_reference = channel.value([[id: 'wgs_reference'], fasta, fasta_index])
+    } else {
+        ch_reference = channel.value([[:], [], []])
+    }
+
+    HLALA_TYPING(ch_typing_input, ch_reference)
 
     ch_bestguess_g = HLALA_TYPING.out.hla
         .map { meta, hla_files ->

@@ -35,6 +35,26 @@ input:
     - graph:
         type: directory
         description: Path to prepared graph with hla-la --action prepareGraph
+  - - meta2:
+        type: map
+        description: |
+          Groovy Map containing reference information
+          e.g. [ id:'genome' ]
+    - fasta:
+        type: file
+        description: |
+          Optional reference FASTA the CRAM input was compressed against,
+          passed to HLA-LA as --samtools_T. Pass [] to omit.
+        pattern: "*.{fa,fasta,fna,fa.gz,fasta.gz,fna.gz}"
+        ontologies:
+          - edam: http://edamontology.org/format_1929 # FASTA
+    - fasta_index:
+        type: file
+        description: |
+          Index file(s) of the reference FASTA (.fai, plus .gzi when the
+          FASTA is bgzip-compressed). Pass [] to omit.
+        pattern: "*.{fai,gzi}"
+        ontologies: []
 output:
   results:
     - - meta:

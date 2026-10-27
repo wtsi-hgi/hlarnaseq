@@ -1,0 +1,83 @@
+Changes in component 'nf-core/hlala/typing'
+'modules/nf-core/hlala/typing/environment.yml' is unchanged
+Changes in 'hlala/typing/main.nf':
+--- modules/nf-core/hlala/typing/main.nf
++++ modules/nf-core/hlala/typing/main.nf
+@@ -9,6 +9,7 @@
+ 
+     input:
+     tuple val(meta), path(bam), path(bai), path(graph)
++    tuple val(meta2), path(fasta), path(fasta_index)
+ 
+     output:
+     tuple val(meta), path("${prefix}")                              , emit: results
+@@ -30,6 +31,7 @@
+     script:
+     args   = task.ext.args   ?: ''
+     prefix = task.ext.prefix ?: "${meta.id}"
++    def reference = fasta ? "--samtools_T ${fasta}" : ''
+ 
+     def bin = ""
+     if (workflow.profile.tokenize(',').intersect(['conda', 'mamba']).size() >= 1) {
+@@ -45,6 +47,7 @@
+         --sampleID ${prefix} \\
+         --workingDir . \\
+         --maxThreads $task.cpus \\
++        $reference \\
+         $args
+     """
+ 
+
+Changes in 'hlala/typing/meta.yml':
+--- modules/nf-core/hlala/typing/meta.yml
++++ modules/nf-core/hlala/typing/meta.yml
+@@ -35,6 +35,26 @@
+     - graph:
+         type: directory
+         description: Path to prepared graph with hla-la --action prepareGraph
++  - - meta2:
++        type: map
++        description: |
++          Groovy Map containing reference information
++          e.g. [ id:'genome' ]
++    - fasta:
++        type: file
++        description: |
++          Optional reference FASTA the CRAM input was compressed against,
++          passed to HLA-LA as --samtools_T. Pass [] to omit.
++        pattern: "*.{fa,fasta,fna,fa.gz,fasta.gz,fna.gz}"
++        ontologies:
++          - edam: http://edamontology.org/format_1929 # FASTA
++    - fasta_index:
++        type: file
++        description: |
++          Index file(s) of the reference FASTA (.fai, plus .gzi when the
++          FASTA is bgzip-compressed). Pass [] to omit.
++        pattern: "*.{fai,gzi}"
++        ontologies: []
+ output:
+   results:
+     - - meta:
+
+Changes in 'hlala/typing/tests/main.nf.test':
+--- modules/nf-core/hlala/typing/tests/main.nf.test
++++ modules/nf-core/hlala/typing/tests/main.nf.test
+@@ -59,6 +59,7 @@
+                 ).combine(
+                     HLALA_PREPAREGRAPH.out.graph.map{ it[1] }
+                 )
++                input[1] = [ [:], [], [] ]
+                 """
+             }
+         }
+@@ -93,6 +94,7 @@
+                     file(params.modules_testdata_base_path + 'genomics/homo_sapiens/illumina/bam/test.paired_end.sorted.bam.bai', checkIfExists: true),
+                     []
+                 ])
++                input[1] = [ [:], [], [] ]
+                 """
+             }
+         }
+
+'modules/nf-core/hlala/typing/tests/main.nf.test.snap' is unchanged
+************************************************************

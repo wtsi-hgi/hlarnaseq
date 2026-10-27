@@ -164,6 +164,16 @@
                     "help_text": "Required when `--wgs_samples` is provided. This path is passed to `HLA-LA.pl --customGraphDir` and must contain the prepared graph selected with `--hlala_graph`.",
                     "fa_icon": "fas fa-folder-tree"
                 },
+                "wgs_reference": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "mimetype": "text/plain",
+                    "pattern": "^\\S+\\.(fa|fasta|fna)(\\.gz)?$",
+                    "description": "Optional reference genome FASTA used to decode CRAM files in `--wgs_samples` for HLA-LA.",
+                    "help_text": "Must be the same FASTA the CRAMs were compressed against; a CRAM compressed against a different reference fails its HLALA_TYPING task. The FASTA must be indexed: `<fasta>.fai` must exist, and a `.gz` FASTA must be bgzip-compressed with `<fasta>.gzi` present (`samtools faidx <fasta>` creates both). When given, it is passed to HLA-LA as `--samtools_T`; when omitted, CRAM decoding relies on `REF_PATH`/`REF_CACHE`. Has no effect on BAM input.",
+                    "fa_icon": "fas fa-dna"
+                },
                 "hibag_model": {
                     "type": "string",
                     "format": "file-path",

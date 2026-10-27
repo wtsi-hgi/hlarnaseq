@@ -9,6 +9,7 @@ process HLALA_TYPING {
 
     input:
     tuple val(meta), path(bam), path(bai), path(graph)
+    tuple val(meta2), path(fasta), path(fasta_index)
 
     output:
     tuple val(meta), path("${prefix}")                              , emit: results
@@ -30,6 +31,7 @@ process HLALA_TYPING {
     script:
     args   = task.ext.args   ?: ''
     prefix = task.ext.prefix ?: "${meta.id}"
+    def reference = fasta ? "--samtools_T ${fasta}" : ''
 
     def bin = ""
     if (workflow.profile.tokenize(',').intersect(['conda', 'mamba']).size() >= 1) {
@@ -45,6 +47,7 @@ process HLALA_TYPING {
         --sampleID ${prefix} \\
         --workingDir . \\
         --maxThreads $task.cpus \\
+        $reference \\
         $args
     """
 

@@ -129,8 +129,17 @@ workflow PIPELINE_INITIALISATION {
     if (wgs_samples) {
         validateWgsSamplesheetHeader(wgs_samples)
 
+        def wgs_rows = samplesheetToList(wgs_samples, "${projectDir}/assets/schema_wgs_samples.json")
+
+        // --wgs_reference only changes how CRAM is decoded (`-T` is ignored
+        // for BAM), so say so rather than silently doing nothing when the
+        // sheet has no CRAM rows at all.
+        if (params.wgs_reference && !wgs_rows.any { row -> row[1].toString().endsWith('.cram') }) {
+            log.warn("--wgs_reference is set but no --wgs_samples row is a CRAM; it has no effect on BAM input.")
+        }
+
         channel
-            .fromList(samplesheetToList(wgs_samples, "${projectDir}/assets/schema_wgs_samples.json"))
+            .fromList(wgs_rows)
             .map {
                 meta, WGS_BAM_path, WGS_BAI_path ->
                     return [
@@ -245,6 +254,7 @@ def validateInputParameters() {
     genomeExistsError()
     genotypeSourceExclusiveError()
     hlalaGraphDirExistsError()
+    wgsReferenceIndexExistsError()
     hibagModelExistsError()
     hlapmRepoExistsError()
     arcashlaReferenceDirExistsError()
@@ -510,6 +520,45 @@ def hlalaGraphDirExistsError() {
         }
     }
 }
+//
+// Exit pipeline if --wgs_reference is given without the index HLA-LA's samtools needs
+//
+// The FASTA reaches HLALA_TYPING as a staged input, together with whatever
+// index files sit beside it. Without a .fai, htslib would build one inside
+// every HLALA_TYPING task (a whole-genome faidx per sample, written into the
+// task directory and thrown away); and a .gz FASTA is only usable by samtools
+// if it is bgzip-compressed with a .gzi - a plain-gzip FASTA would only fail
+// late, inside the task. Both are cheap to check here, before any task runs.
+//
+def wgsReferenceIndexExistsError() {
+    if (!params.wgs_reference) {
+        return
+    }
+
+    if (!params.wgs_samples) {
+        log.warn("--wgs_reference is set without --wgs_samples; it is only used by HLA-LA on WGS CRAM input and has no effect.")
+        return
+    }
+
+    def fasta   = params.wgs_reference.toString()
+    def missing = ["${fasta}.fai"]
+    if (fasta.endsWith('.gz')) {
+        missing << "${fasta}.gzi"
+    }
+    missing = missing.findAll { index -> !file(index).exists() }
+
+    if (missing) {
+        error(
+            "Please check --wgs_reference -> the reference FASTA is not indexed (missing ${missing.join(', ')}).\n" +
+            "  HLA-LA's samtools needs the index beside the FASTA to decode CRAM input; create it once with:\n" +
+            "      samtools faidx ${fasta}\n" +
+            (fasta.endsWith('.gz')
+                ? "  A .gz FASTA must be bgzip-compressed (not plain gzip) for samtools faidx to index it.\n"
+                : "")
+        )
+    }
+}
+
 //
 // Exit pipeline if there is no source of HLApm at all
 //

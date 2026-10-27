@@ -161,7 +161,27 @@ nextflow run wtsi-hgi/hlarnaseq \
 
 ### CRAM input and the reference genome
 
-Reading a CRAM requires the reference genome it was compressed against. The pipeline does **not** take a reference FASTA for this and passes none to HLA-LA: samtools inside the `HLALA_TYPING` container finds the reference through the standard htslib `REF_PATH`/`REF_CACHE` environment variables of the environment the pipeline is launched from. For example, on the Sanger farm these are set by default, LSF copies them into each job, and the `sanger` profile mounts `/lustre`, `/nfs`, `/data` and `/software` into the container.
+Reading a CRAM requires the reference genome it was compressed against. There are two ways for samtools inside the `HLALA_TYPING` container to find it.
+
+**Recommended: pass it with `--wgs_reference`.** Give the FASTA the CRAMs were compressed against:
+
+```bash
+--wgs_reference /path/to/GRCh38.fa
+```
+
+The pipeline stages that FASTA and its index into every `HLALA_TYPING` task and passes it to HLA-LA as `--samtools_T`, so each `samtools view` that HLA-LA runs on the input decodes the CRAM with `-T <fasta>`. This works the same under `docker`, `singularity`, `apptainer` and `conda`, with no environment variables or bind mounts to set up. Changing the FASTA invalidates cached HLA-LA results under `-resume`.
+
+The FASTA must be indexed before the run. The pipeline checks this at launch and refuses to start without the index, because otherwise samtools would rebuild the whole-genome index inside every task:
+
+```bash
+samtools faidx /path/to/GRCh38.fa          # writes GRCh38.fa.fai
+```
+
+A compressed FASTA (`.fa.gz`, `.fasta.gz`, `.fna.gz`) must be **bgzip**-compressed, not plain gzip, and needs both `<fasta>.fai` and `<fasta>.gzi`. `samtools faidx` writes both for a bgzipped file. To convert a plain-gzip FASTA, run `zcat genome.fa.gz | bgzip -c > genome.bgzip.fa.gz` and then `samtools faidx genome.bgzip.fa.gz`.
+
+`--wgs_reference` must be the reference the CRAMs were actually compressed against. If a CRAM was compressed against a different one, htslib detects the mismatch from the per-slice `M5` checksums and its `HLALA_TYPING` task **fails**. This is deliberate: there is no silent fallback to another reference. A single `--wgs_reference` applies to every row in `--wgs_samples`, so a cohort whose CRAMs use different references has to be run in separate batches, or rely on `REF_PATH`/`REF_CACHE` (below). The parameter has no effect on BAM rows, so mixed BAM/CRAM samplesheets are fine. The pipeline warns if it is set but no row is a CRAM.
+
+**Fallback: `REF_PATH`/`REF_CACHE`.** Without `--wgs_reference`, no reference is passed to HLA-LA, and samtools finds the reference through the standard htslib `REF_PATH`/`REF_CACHE` environment variables of the environment the pipeline is launched from. For example, on the Sanger farm these are set by default, LSF copies them into each job, and the `sanger` profile mounts `/lustre`, `/nfs`, `/data` and `/software` into the container.
 
 Elsewhere, make sure that:
 
@@ -169,7 +189,7 @@ Elsewhere, make sure that:
 - the directories they point to are visible inside the container (add bind mounts if they are outside the paths your profile mounts);
 - under `-profile docker`, the variables are forwarded into the container (for example with `docker.envWhitelist = 'REF_PATH,REF_CACHE'` in a custom config), since Docker does not pass the host environment through.
 
-Without a usable local reference, samtools falls back to downloading the reference sequences from the EBI reference server named in the CRAM header, which is slow and fails on compute nodes without network access.
+Without a usable local reference, samtools falls back to downloading the reference sequences from the EBI reference server named in the CRAM header. That is slow, repeats for every CRAM sample, and fails on compute nodes without network access. The symptom is an `HLALA_TYPING` task whose `samtools view` runs for many minutes using almost no CPU, with a thread blocked in `do_select` (waiting on the network). If you see that, pass `--wgs_reference`.
 
 ### Preparing the HLA-LA graph
 

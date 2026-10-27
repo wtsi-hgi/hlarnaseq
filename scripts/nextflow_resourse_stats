@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+"""
+Summarise per-task CPU and memory usage of a Nextflow run.
+
+Why this exists
+---------------
+To measure how efficiently the pipeline uses HPC resources: how much CPU time
+and memory each task took, how that compares with what it requested, and how
+those numbers are distributed per process.
+
+Inputs
+------
+One or more tab-separated task tables, either:
+
+  - the execution trace, ${outdir}/pipeline_info/execution_trace_<suffix>.txt
+    (richest when the run was launched with -c conf/resources.config, which
+    adds requested cpus/memory/time and writes raw units); or
+  - `nextflow log` output for a finished run, e.g. from the launch directory:
+
+        nextflow log <run_name> \\
+          -f 'process,tag,name,status,exit,attempt,native_id,hash,cpus,memory,time,realtime,duration,pcpu,peak_rss,peak_vmem,rchar,wchar' \\
+          > <run_name>.resources.tsv
+
+    (`nextflow log` separates fields with tabs by default; do not pass
+    -s $'\\t', which yields no separator at all - use -s '\\t' if needed.
+    It calls the trace file's `%cpu` column `pcpu`; both names
+    are accepted. It also prints no header row; this script adds one from the
+    -f field list above when the first row does not look like a header - pass
+    the same list with --fields if you used a different one.)
+
+Both raw (ms, bytes) and human-readable ("1m 58s", "7.6 MB", "3.0%") values
+are accepted. Rows are de-duplicated by task hash, so several trace files from
+-resume runs of one analysis can be combined; CACHED rows carry the metrics of
+the run that originally executed the task.
+
+Derived metrics
+---------------
+  realtime_min  task wall time, excluding queueing and staging
+  wait_min      duration - realtime: LSF queue wait, container start, staging
+  cpu_time_h    realtime * %cpu / 100   (%cpu: 100 = one fully busy core)
+  peak_rss_gb   peak resident memory
+  mem_req_gb    requested memory                      (needs `memory` column)
+  cpu_eff       %cpu / (100 * cpus): share of allocated cores used (needs `cpus`)
+  mem_eff       peak_rss / memory: share of requested memory used (needs `memory`)
+
+Outputs (in --outdir)
+---------------------
+  resource_tasks.tsv     one row per task, with the derived metrics
+  resource_summary.tsv   per process: n, min, median, mean, max, sum per metric,
+                         plus an ALL row over every task
+  violin_<metric>.png    per-process distribution of each metric (linear x axis)
+
+Requirements
+------------
+python3 with pandas and matplotlib. This is an operator-side helper, run
+outside the pipeline, e.g.:
+
+    conda create -n runstats -c conda-forge python pandas matplotlib
+
+Exit status
+-----------
+0  outputs written
+2  an input could not be used (unreadable, or no usable task rows)
+"""
+
+import argparse
+import os
+import re
+import sys
+
+import pandas as pd
+
+DEFAULT_LOG_FIELDS = (
+    "process,tag,name,status,exit,attempt,native_id,hash,cpus,memory,time,"
+    "realtime,duration,pcpu,peak_rss,peak_vmem,rchar,wchar"
+)
+MISSING = {"", "-", "nan", "NaN", "None"}
+DURATION_UNITS = {"d": 86400.0, "h": 3600.0, "m": 60.0, "s": 1.0, "ms": 1e-3}
+MEMORY_UNITS = {"B": 0, "KB": 1, "MB": 2, "GB": 3, "TB": 4, "PB": 5}
+ABSOLUTE_METRICS = ["realtime_min", "wait_min", "cpu_time_h", "peak_rss_gb", "mem_req_gb"]
+RATIO_METRICS = ["cpu_eff", "mem_eff"]
+METRIC_LABELS = {
+    "realtime_min": "Task wall time (min)",
+    "wait_min": "Queue + staging overhead (min)",
+    "cpu_time_h": "CPU time (core-hours)",
+    "peak_rss_gb": "Peak RSS (GB)",
+    "mem_req_gb": "Requested memory (GB)",
+    "cpu_eff": "CPU efficiency (used / allocated cores)",
+    "mem_eff": "Memory efficiency (peak RSS / requested)",
+}
+
+
+def is_number(text):
+    try:
+        float(text)
+        return True
+    except ValueError:
+        return False
+
+
+def duration_seconds(value):
+    """'1h 2m 3.4s' / '500ms' (human) or '118743' (raw ms) -> seconds."""
+    text = str(value).strip()
+    if text in MISSING:
+        return float("nan")
+    if is_number(text):
+        return float(text) / 1000.0
+    parts = re.findall(r"([\d.]+)\s*(ms|d|h|m|s)\b", text)
+    if not parts:
+        return float("nan")
+    return sum(float(n) * DURATION_UNITS[u] for n, u in parts)
+
+
+def memory_bytes(value):
+    """'7.6 MB' (human) or '7930880' (raw bytes) -> bytes."""
+    text = str(value).strip()
+    if text in MISSING:
+        return float("nan")
+    if is_number(text):
+        return float(text)
+    match = re.fullmatch(r"([\d.]+)\s*([KMGTP]?B)", text)
+    if not match:
+        return float("nan")
+    return float(match.group(1)) * 1024 ** MEMORY_UNITS[match.group(2)]
+
+
+def percent(value):
+    """'3.0%' (human) or '3.0' (raw) -> 3.0"""
+    text = str(value).strip().rstrip("%")
+    return float(text) if is_number(text) else float("nan")
+
+
+def read_table(path, fields):
+    table = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False, header=None)
+    first = list(table.iloc[0])
+    if "name" in first or "process" in first:
+        table.columns = first
+        table = table.iloc[1:].reset_index(drop=True)
+    else:
+        names = fields.split(",")
+        if len(names) != table.shape[1]:
+            raise ValueError(
+                f"{path}: no header row, and --fields lists {len(names)} columns "
+                f"but the file has {table.shape[1]}"
+            )
+        table.columns = names
+    if "pcpu" in table and "%cpu" not in table:
+        table = table.rename(columns={"pcpu": "%cpu"})
+    # The default trace has no `process` column: recover it from "NAME (tag)".
+    # Done per file, so default and extended traces can be combined.
+    if "process" not in table and "name" in table:
+        table["process"] = table["name"].str.replace(r"\s*\(.*\)$", "", regex=True)
+    return table
+
+
+def common_prefix(names):
+    """Longest shared ':'-separated prefix, e.g. 'WTSIHGI_HLARNASEQ:HLARNASEQ:'."""
+    split = [n.split(":") for n in names]
+    prefix = []
+    for parts in zip(*split):
+        if len(set(parts)) != 1:
+            break
+        prefix.append(parts[0])
+    # Never strip a whole name away.
+    if prefix and any(len(s) == len(prefix) for s in split):
+        prefix.pop()
+    return ":".join(prefix) + ":" if prefix else ""
+
+
+def derive(df):
+    out = pd.DataFrame(index=df.index)
+    process = df["process"]
+    out["process"] = process.str.removeprefix(common_prefix(process.unique()))
+    for col in ("tag", "name", "status", "exit", "attempt", "native_id", "hash"):
+        if col in df:
+            out[col] = df[col]
+
+    realtime_s = df["realtime"].map(duration_seconds)
+    out["realtime_min"] = realtime_s / 60
+    if "duration" in df:
+        out["wait_min"] = (df["duration"].map(duration_seconds) - realtime_s) / 60
+    if "%cpu" in df:
+        cpu_pct = df["%cpu"].map(percent)
+        out["cpu_time_h"] = realtime_s * cpu_pct / 100 / 3600
+    if "peak_rss" in df:
+        out["peak_rss_gb"] = df["peak_rss"].map(memory_bytes) / 1024**3
+    if "cpus" in df:
+        cpus = pd.to_numeric(df["cpus"].replace(list(MISSING), None), errors="coerce")
+        out["cpus"] = cpus
+        if "%cpu" in df:
+            out["cpu_eff"] = cpu_pct / (100 * cpus)
+    if "memory" in df:
+        out["mem_req_gb"] = df["memory"].map(memory_bytes) / 1024**3
+        if "peak_rss" in df:
+            out["mem_eff"] = out["peak_rss_gb"] / out["mem_req_gb"]
+    return out
+
+
+def summarise(tasks, metrics):
+    stats = ["count", "min", "median", "mean", "max", "sum"]
+    per_process = tasks.groupby("process")[metrics].agg(stats)
+    overall = tasks[metrics].agg(stats).unstack().to_frame("ALL").T
+    summary = pd.concat([per_process, overall])
+    summary.columns = [f"{metric}_{stat}" for metric, stat in summary.columns]
+    summary.index.name = "process"
+    return summary
+
+
+def violin(tasks, metric, path):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    data = tasks[["process", metric]].dropna()
+    if data.empty:
+        return False
+    order = data.groupby("process")[metric].median().sort_values().index
+    groups = [data.loc[data.process == p, metric].to_numpy() for p in order]
+    positions = range(1, len(order) + 1)
+
+    fig, ax = plt.subplots(figsize=(9, 0.45 * len(order) + 1.8))
+    # A KDE needs at least two distinct values; other groups get points only.
+    kde = [(pos, g) for pos, g in zip(positions, groups) if len(set(g)) > 1]
+    if kde:
+        # `orientation` replaced `vert` in matplotlib 3.10.
+        if tuple(int(v) for v in matplotlib.__version__.split(".")[:2]) >= (3, 10):
+            horizontal = {"orientation": "horizontal"}
+        else:
+            horizontal = {"vert": False}
+        parts = ax.violinplot(
+            [g for _, g in kde], positions=[p for p, _ in kde],
+            showextrema=False, **horizontal, widths=0.8,
+        )
+        for body in parts["bodies"]:
+            body.set_facecolor("#4C78A8")
+            body.set_edgecolor("none")
+            body.set_alpha(0.35)
+    for pos, g in zip(positions, groups):
+        jitter = (pd.Series(range(len(g))) % 7 - 3) * 0.04
+        ax.scatter(g, pos + jitter, s=6, color="#4C78A8", alpha=0.6, linewidths=0)
+        ax.hlines(pos, g.min(), g.max(), color="#555555", linewidth=0.8)
+        ax.scatter([pd.Series(g).median()], [pos], marker="|", s=250, color="#E45756", zorder=3)
+
+    ax.set_yticks(list(positions))
+    # Label with the bare process name; the TSVs keep the full workflow path.
+    labels = [f"{p.rsplit(':', 1)[-1]}  (n={len(g)})" for p, g in zip(order, groups)]
+    ax.set_yticklabels(labels, fontsize=8)
+    if metric in RATIO_METRICS:
+        ax.axvline(1.0, color="#999999", linestyle="--", linewidth=0.8)
+    ax.set_xlabel(METRIC_LABELS.get(metric, metric))
+    ax.set_title(f"{METRIC_LABELS.get(metric, metric)} per process  (red = median, line = min-max)", fontsize=10)
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("trace", nargs="+", help="execution trace file(s) or `nextflow log` TSV(s)")
+    parser.add_argument("-o", "--outdir", default="runstats", help="output directory (default: %(default)s)")
+    parser.add_argument(
+        "--status", default="COMPLETED,CACHED",
+        help="comma-separated task statuses to keep; 'all' keeps every row, "
+        "e.g. to count CPU burnt by FAILED attempts (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--fields", default=DEFAULT_LOG_FIELDS,
+        help="column names for header-less `nextflow log` input (default: %(default)s)",
+    )
+    args = parser.parse_args()
+
+    try:
+        raw = pd.concat([read_table(p, args.fields) for p in args.trace], ignore_index=True)
+    except (OSError, ValueError, pd.errors.ParserError) as err:
+        print(f"error: {err}", file=sys.stderr)
+        sys.exit(2)
+    if "realtime" not in raw or "process" not in raw:
+        print("error: input needs a 'realtime' column and a 'name' or 'process' column", file=sys.stderr)
+        sys.exit(2)
+
+    if args.status.lower() != "all" and "status" in raw:
+        raw = raw[raw["status"].isin(args.status.split(","))]
+    if "hash" in raw:
+        raw = raw.drop_duplicates("hash", keep="last")
+    if raw.empty:
+        print("error: no task rows left after filtering by --status", file=sys.stderr)
+        sys.exit(2)
+
+    tasks = derive(raw.reset_index(drop=True))
+    metrics = [m for m in ABSOLUTE_METRICS + RATIO_METRICS if m in tasks]
+
+    os.makedirs(args.outdir, exist_ok=True)
+    tasks.to_csv(
+        os.path.join(args.outdir, "resource_tasks.tsv"), sep="\t", index=False, float_format="%.6g"
+    )
+    summarise(tasks, metrics).to_csv(
+        os.path.join(args.outdir, "resource_summary.tsv"), sep="\t", float_format="%.6g"
+    )
+    for metric in metrics:
+        violin(tasks, metric, os.path.join(args.outdir, f"violin_{metric}.png"))
+
+    totals = tasks[metrics].sum(numeric_only=True)
+    print(f"{len(tasks)} tasks across {tasks.process.nunique()} processes -> {args.outdir}/")
+    if "cpu_time_h" in totals:
+        print(f"  total CPU time: {totals['cpu_time_h']:.4g} core-hours")
+    if "cpus" in tasks:
+        allocated = (tasks.cpus * tasks.realtime_min / 60).sum()
+        print(f"  allocated core-hours: {allocated:.4g}")
+
+
+if __name__ == "__main__":
+    main()
