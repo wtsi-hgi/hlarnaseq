@@ -91,9 +91,9 @@
                 },
                 "hlapm_allowed_loci": {
                     "type": "string",
-                    "default": "A,B,C,DRB1,DQA1,DQB1,DPA1,DPB1,DOA,DOB,G,E,F",
+                    "default": "A,B,C,DMA,DMB,DOA,DOB,DPA1,DPA2,DPB1,DPB2,DQA1,DQA2,DQB1,DQB2,DRA,DRB1,DRB2,DRB3,DRB4,DRB5,DRB6,DRB7,DRB8,DRB9,E,F,G,HFE,N,P,S,T,U",
                     "description": "Comma-separated allow-list of HLA loci (without the 'HLA-' prefix) to include when building HLApm personalized-reference input.",
-                    "help_text": "Passed through to the HLAPM_PREPARE_INPUT step's `--allowed-loci` flag. HLA_CONSENSUS output loci not in this list (e.g. `HLA-DRB3`, `HLA-H`, `HLA-J`, `HLA-K`, `HLA-L`) are silently omitted from the per-individual HLApm input TSVs, since HLApm's own per-allele locus regex cannot safely handle them.",
+                    "help_text": "Passed through to the HLAPM_PREPARE_INPUT step's `--allowed-loci` flag. HLA_CONSENSUS output loci not in this list are silently omitted from the per-individual HLApm input TSVs. The default is every locus HLApm's bundled IMGT 3.52.0 reference has sequences for, except the pseudogenes `H`, `J`, `K` and `L`; loci HLApm has no reference for (e.g. `MICA`) must stay out of the list, because HLApm cannot build them.",
                     "fa_icon": "fas fa-filter"
                 },
                 "hlapm_quantify_max_edit_distance": {
